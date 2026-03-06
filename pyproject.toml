@@ -1,0 +1,30 @@
+[project]
+name = "news-video-maker"
+version = "0.1.0"
+description = "Tech news short video auto-generator for YouTube"
+dependencies = [
+    "claude-agent-sdk>=0.0.1",
+    "feedparser>=6.0.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "moviepy>=2.0.0",
+    "pillow>=11.0.0",
+    "google-api-python-client>=2.0.0",
+    "google-auth-oauthlib>=1.0.0",
+    "pyyaml>=6.0.0",
+    "ruff>=0.11.0",
+]
+requires-python = ">=3.12"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-mock"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
