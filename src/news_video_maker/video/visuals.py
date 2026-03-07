@@ -22,12 +22,13 @@ _SUBTITLE_TEMPLATE = """\
 <html>
 <head>
 <meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@900&display=swap" rel="stylesheet">
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
     background: #0d1117;
-    font-family: 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
+    font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
   .bg {{
@@ -41,74 +42,43 @@ _SUBTITLE_TEMPLATE = """\
     position: absolute; inset: 0;
     background: rgba(0, 0, 0, 0.30);
   }}
-  /* タイトルバー（上部固定） */
+  /* タイトルバー（上部フルwidth） */
   .title-bar {{
     position: absolute;
-    top: 60px; left: 50px; right: 50px;
+    top: 0; left: 0; right: 0;
     z-index: 20;
-  }}
-  .title-bg {{
-    display: inline-block;
-    background: rgba(0, 0, 0, 0.85);
-    border-left: 6px solid #FF4444;
-    border-radius: 0 12px 12px 0;
-    padding: 18px 28px;
-    max-width: 100%;
+    background: rgba(0, 0, 0, 0.90);
+    padding: 40px 50px 36px;
   }}
   .title-text {{
-    font-size: 46px; font-weight: 900;
+    font-size: 80px; font-weight: 900;
     color: #FFFFFF;
-    line-height: 1.35;
-    text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+    line-height: 1.25;
     word-break: break-all;
+    letter-spacing: -1px;
   }}
-  /* ソースラベル */
-  .source-label {{
-    position: absolute;
-    top: 230px; left: 56px;
-    z-index: 20;
-    display: inline-flex;
-    align-items: center; gap: 10px;
-  }}
-  .source-dot {{
-    width: 8px; height: 8px; border-radius: 50%;
-    background: {source_color};
-    flex-shrink: 0;
-  }}
-  .source-text {{
-    font-size: 28px; font-weight: 700;
-    color: rgba(255,255,255,0.85);
-    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000;
-  }}
-  /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px） */
+  /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px）
+     NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
   .subtitle-area {{
     position: absolute;
     bottom: 500px; left: 50px; right: 50px;
     z-index: 20;
-    display: flex; justify-content: center;
+    text-align: left;
   }}
-  .subtitle-bg {{
-    display: inline-block;
-    background: transparent;
-    padding: 0;
-    max-width: 100%;
-  }}
-  .subtitle-text {{
+  .subtitle-line {{
+    display: inline;
+    background: #ffffff;
+    color: #111111;
     font-size: 64px; font-weight: 900;
-    color: #FFFF00;
-    line-height: 1.45;
-    text-align: center;
-    text-shadow:
-      3px  3px 0 #000,
-      -3px -3px 0 #000,
-      3px -3px 0 #000,
-      -3px  3px 0 #000,
-      0    3px 0 #000,
-      3px  0   0 #000,
-      -3px 0   0 #000,
-      0   -3px 0 #000;
-    word-break: break-all;
-    -webkit-text-stroke: 2px #000;
+    line-height: 1.85;
+    padding: 6px 14px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    letter-spacing: -1px;
+  }}
+  .subtitle-line .kw {{
+    background: #FFE000;
+    color: #111111;
   }}
 </style>
 </head>
@@ -116,18 +86,10 @@ _SUBTITLE_TEMPLATE = """\
   <div class="bg" id="bg"></div>
   <div class="bg-overlay"></div>
   <div class="title-bar">
-    <div class="title-bg">
-      <div class="title-text">{title}</div>
-    </div>
-  </div>
-  <div class="source-label">
-    <div class="source-dot"></div>
-    <span class="source-text">{source}</span>
+    <div class="title-text">{title}</div>
   </div>
   <div class="subtitle-area">
-    <div class="subtitle-bg">
-      <div class="subtitle-text" id="subtitle">{subtitle}</div>
-    </div>
+    <span class="subtitle-line" id="subtitle">{subtitle_html}</span>
   </div>
 </body>
 </html>
@@ -138,12 +100,13 @@ _CTA_TEMPLATE = """\
 <html>
 <head>
 <meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@900&display=swap" rel="stylesheet">
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
     background: #0d1117;
-    font-family: 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
+    font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
   .bg {{
@@ -155,39 +118,29 @@ _CTA_TEMPLATE = """\
   }}
   .bg-overlay {{
     position: absolute; inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.40);
   }}
   .cta-center {{
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     z-index: 20;
-  }}
-  .cta-bg {{
-    display: inline-block;
-    background: rgba(0, 0, 0, 0.85);
-    border-radius: 28px;
-    padding: 60px 80px;
-    text-align: center;
+    padding: 0 60px;
   }}
   .cta-emoji {{
-    font-size: 120px; line-height: 1; margin-bottom: 32px;
+    font-size: 180px; line-height: 1; margin-bottom: 60px;
+    text-align: center;
   }}
-  .cta-text {{
+  .cta-line {{
+    display: inline;
+    background: #ffffff;
+    color: #111111;
     font-size: 68px; font-weight: 900;
-    color: #FFFF00;
-    line-height: 1.6;
-    text-shadow:
-      3px  3px 0 #000,
-      -3px -3px 0 #000,
-      3px -3px 0 #000,
-      -3px  3px 0 #000,
-      0    3px 0 #000,
-      3px  0   0 #000,
-      -3px 0   0 #000,
-      0   -3px 0 #000;
-    white-space: pre-line;
-    -webkit-text-stroke: 2px #000;
+    line-height: 2.0;
+    padding: 6px 20px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    letter-spacing: -1px;
   }}
 </style>
 </head>
@@ -195,9 +148,9 @@ _CTA_TEMPLATE = """\
   <div class="bg" id="bg"></div>
   <div class="bg-overlay"></div>
   <div class="cta-center">
-    <div class="cta-bg">
-      <div class="cta-emoji">👍</div>
-      <div class="cta-text">{cta_text}</div>
+    <div class="cta-emoji">👍🔔</div>
+    <div style="text-align: center;">
+      <span class="cta-line">高評価とチャンネル登録<br>よろしくお願いします！</span>
     </div>
   </div>
 </body>
@@ -213,6 +166,18 @@ SOURCE_COLORS: dict[str, str] = {
     "theverge": "#fa4718",
     "hackernews": "#ff6600",
 }
+
+
+def _chunk_to_html(chunk: str) -> str:
+    """**keyword** マークアップを HTML span (.kw) に変換する"""
+    result = ""
+    last = 0
+    for m in re.finditer(r'\*\*(.+?)\*\*', chunk):
+        result += html_module.escape(chunk[last:m.start()])
+        result += f'<span class="kw">{html_module.escape(m.group(1))}</span>'
+        last = m.end()
+    result += html_module.escape(chunk[last:])
+    return result
 
 
 def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
@@ -359,9 +324,10 @@ async def _render_frames_async(
         for chunk_idx, (chunk, chunk_dur) in enumerate(zip(subtitle_chunks, chunk_durations)):
             # 字幕テキストを更新（CTAテンプレートは subtitle 要素なし）
             if not is_cta:
-                escaped_chunk = chunk.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+                chunk_html = _chunk_to_html(chunk)
                 await page.evaluate(
-                    f"document.getElementById('subtitle').textContent = '{escaped_chunk}';"
+                    "([html]) => { document.getElementById('subtitle').innerHTML = html; }",
+                    [chunk_html],
                 )
 
             n_frames = max(1, round(chunk_dur * FPS))
@@ -416,27 +382,21 @@ def generate_subtitle_clip(
     subtitle_chunks: list[str],
     chunk_durations: list[float],
     bg_data_url: str,
-    source: str,
-    source_url: str,
     duration: float,
     section_start: float = 0.0,
     total_duration: float = 60.0,
 ) -> VideoClip:
     """字幕スタイルの VideoClip を返す。
 
-    subtitle_chunks: 表示する字幕テキストのリスト（narration_text を分割したもの）
+    subtitle_chunks: 表示する字幕テキストのリスト（**keyword** マークアップ対応）
     chunk_durations: 各チャンクの表示時間（秒）
     """
-    source_color = SOURCE_COLORS.get(source, "#00dcc2")
-
     html = _SUBTITLE_TEMPLATE.format(
         width=WIDTH,
         height=HEIGHT,
         bg_data_url=bg_data_url or "",
         title=html_module.escape(title),
-        source=html_module.escape(source),
-        source_color=source_color,
-        subtitle=html_module.escape(subtitle_chunks[0] if subtitle_chunks else ""),
+        subtitle_html=_chunk_to_html(subtitle_chunks[0] if subtitle_chunks else ""),
     )
 
     logger.info("字幕クリップレンダリング開始: %d チャンク, %.1fs", len(subtitle_chunks), duration)
