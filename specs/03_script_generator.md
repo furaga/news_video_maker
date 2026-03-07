@@ -39,10 +39,22 @@ Claude Code（LLM処理）
       "estimated_duration_sec": 5.0
     },
     {
-      "type": "main",
+      "type": "main_1",
       "narration_text": "...",
       "subtitle_text": "...",
-      "estimated_duration_sec": 35.0
+      "estimated_duration_sec": 9.0
+    },
+    {
+      "type": "main_2",
+      "narration_text": "...",
+      "subtitle_text": "...",
+      "estimated_duration_sec": 9.0
+    },
+    {
+      "type": "main_3",
+      "narration_text": "...",
+      "subtitle_text": "...",
+      "estimated_duration_sec": 9.0
     },
     {
       "type": "outro",
@@ -66,7 +78,7 @@ from typing import Literal
 
 @dataclass
 class ScriptSection:
-    type: Literal["hook", "main", "outro"]
+    type: Literal["hook", "main_1", "main_2", "main_3", "main_4", "outro"]
     narration_text: str
     subtitle_text: str
     estimated_duration_sec: float
@@ -87,9 +99,14 @@ class VideoScript:
 
 | セクション | 目的 | 目標尺 |
 |---|---|---|
-| `hook` | 視聴者の興味を引く導入 | 5秒 |
-| `main` | ニュースの内容・意義を解説 | 20〜45秒 |
-| `outro` | まとめ・締め | 5〜10秒 |
+| `hook` | 視聴者の興味を引く導入 | 4〜5秒 |
+| `main_1` | ニュースの概要・背景 | 7〜10秒 |
+| `main_2` | 詳細・技術的内容 | 7〜10秒 |
+| `main_3` | 関連情報・業界への影響 | 7〜10秒 |
+| `main_4` | 補足・今後の展望（任意） | 7〜10秒 |
+| `outro` | まとめ・締め | 4〜5秒 |
+
+各セクションが切り替わるたびにカードアニメーションが発生するため、セクションを細かく分けることで画面に動きが生まれる。`02_selected.json` の `related_research` フィールドがある場合は `main_3` 以降で活用する。
 
 ### 尺の推定
 
@@ -113,8 +130,8 @@ VOICEVOX の日本語読み上げ速度を基準に推定:
 
 ## エラー処理
 
-- `total_duration_sec` が 60 秒を超える場合は `main` セクションを短縮して再生成する（1回まで）
-- `total_duration_sec` が 25 秒未満の場合は `main` セクションに情報を補足して再生成する（1回まで）
+- `total_duration_sec` が 60 秒を超える場合は各 `main_*` セクションを短縮して再生成する（1回まで）
+- `total_duration_sec` が 25 秒未満の場合は各 `main_*` セクションに情報を補足して再生成する（1回まで）
 
 ---
 
@@ -132,6 +149,7 @@ VOICEVOX の日本語読み上げ速度を基準に推定:
 コマンド実行による E2E テストで確認:
 
 - 正常系: `02_selected.json` から `03_script.json` が生成されること
-- `sections` に `hook`, `main`, `outro` の3種類が含まれること
+- `sections` に `hook`, `main_1`, `main_2`, `main_3`, `outro` が含まれること（合計5件以上）
 - `total_duration_sec` が 25〜60 の範囲であること
 - `subtitle_text` が各セクションで 25 文字以内であること（概ね）
+- `related_research` がある場合は `main_3` 以降に内容が反映されていること

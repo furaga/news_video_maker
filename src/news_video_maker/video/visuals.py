@@ -1,9 +1,9 @@
 """Playwright + HTML/CSS によるアニメーションフレーム生成"""
 import asyncio
 import base64
+import html as html_module
 import io
 import logging
-from pathlib import Path
 
 import httpx
 import numpy as np
@@ -15,212 +15,296 @@ logger = logging.getLogger(__name__)
 WIDTH, HEIGHT = 1080, 1920
 FPS = 30
 INTRO_DURATION = 0.6   # カード + テキストのスライドイン時間
-OUTRO_DURATION = 0.4   # フェードアウト時間
+OUTRO_DURATION = 0.4   # スクロールアップ時間
+
+# セクションタイプごとの視覚スタイル定義
+_SECTION_STYLES: dict[str, dict] = {
+    "hook":   {"badge": "TODAY'S TECH", "accent": "#00dcc2", "is_title": True},
+    "main_1": {"badge": "概要",         "accent": "#00dcc2", "number": "01"},
+    "main_2": {"badge": "詳細",         "accent": "#4a8fff", "number": "02"},
+    "main_3": {"badge": "関連情報",     "accent": "#a855f7", "number": "03"},
+    "main_4": {"badge": "補足",         "accent": "#f59e0b", "number": "04"},
+    "main":   {"badge": "解説",         "accent": "#00dcc2", "number": ""},
+    "outro":  {"badge": "まとめ",       "accent": "#22c55e", "number": ""},
+}
 
 # ---- HTML テンプレート -------------------------------------------------------
-# {bg_data_url}: base64 data URL or empty string
-# {source}:      ソース名 (e.g. "techcrunch.com")
-# {source_url}:  元記事 URL
-# {subtitle}:    字幕テキスト
 
-_HTML_TEMPLATE = """\
+# タイトルカード（hook セクション用）
+_TITLE_CARD_TEMPLATE = """\
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-
   body {{
-    width: {width}px;
-    height: {height}px;
+    width: {width}px; height: {height}px;
     background: #0d1117;
     font-family: 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
-    overflow: hidden;
-    position: relative;
+    overflow: hidden; position: relative;
   }}
-
-  /* 背景画像 (blurred + darkened) */
   .bg {{
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
-    background-size: cover;
-    background-position: center;
-    filter: blur(12px) brightness(0.22) saturate(0.8);
+    background-size: cover; background-position: center;
+    filter: blur(12px) brightness(0.18) saturate(0.7);
     transform: scale(1.06);
   }}
-
-  /* 背景グラデーションオーバーレイ */
   .bg-overlay {{
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      180deg,
-      rgba(5, 10, 30, 0.6) 0%,
-      transparent 40%,
-      transparent 60%,
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      rgba(5, 10, 30, 0.7) 0%, rgba(5, 10, 30, 0.3) 50%,
       rgba(5, 10, 30, 0.8) 100%
     );
   }}
-
-  /* メインコンテンツ */
   .content {{
-    position: relative;
-    z-index: 1;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    position: relative; z-index: 1; height: 100%;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
     padding: 80px 70px;
   }}
-
-  /* メインカード */
   .card {{
     width: 100%;
-    background: rgba(12, 22, 45, 0.82);
-    border: 1px solid rgba(0, 220, 190, 0.18);
+    background: rgba(8, 16, 38, 0.88);
+    border: 1px solid {accent_18};
+    border-top: 4px solid {accent};
     border-radius: 36px;
     padding: 56px 60px 64px;
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     box-shadow:
-      0 0 0 1px rgba(0, 220, 190, 0.08),
-      0 24px 80px rgba(0, 0, 0, 0.6),
+      0 0 0 1px {accent_08},
+      0 0 50px {accent_12},
+      0 24px 80px rgba(0, 0, 0, 0.65),
       inset 0 1px 0 rgba(255, 255, 255, 0.06);
     animation: card-enter {intro_ms}ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }}
-
   @keyframes card-enter {{
     from {{ opacity: 0; transform: translateY(64px); }}
     to   {{ opacity: 1; transform: translateY(0); }}
   }}
-
-  /* ソースラベル */
-  .source-label {{
-    font-size: 30px;
-    font-weight: 700;
-    color: #00dcc2;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    margin-bottom: 22px;
-    opacity: 0;
-    animation: fade-in {intro_ms}ms 150ms ease-out forwards;
+  .news-badge {{
+    display: inline-flex; align-items: center; gap: 12px;
+    font-size: 30px; font-weight: 700;
+    color: {accent};
+    letter-spacing: 0.18em; text-transform: uppercase;
+    margin-bottom: 36px;
+    opacity: 0; animation: fade-in {intro_ms}ms 150ms ease-out forwards;
   }}
-
-  /* 区切り線 */
-  .divider {{
-    height: 1px;
-    background: linear-gradient(90deg,
-      transparent 0%,
-      rgba(0, 220, 190, 0.35) 30%,
-      rgba(0, 220, 190, 0.35) 70%,
-      transparent 100%
-    );
-    margin-bottom: 40px;
-    opacity: 0;
-    animation: fade-in {intro_ms}ms 200ms ease-out forwards;
+  .badge-dot {{
+    width: 12px; height: 12px; border-radius: 50%;
+    background: {accent}; box-shadow: 0 0 10px {accent};
   }}
-
-  /* メインテキスト */
-  .main-text {{
-    font-size: 72px;
-    font-weight: 700;
-    color: #f0f4ff;
-    line-height: 1.4;
-    letter-spacing: 0.01em;
+  .title-text {{
+    font-size: 66px; font-weight: 700;
+    color: #ffffff;
+    line-height: 1.35; letter-spacing: 0.01em;
+    margin-bottom: 36px;
     opacity: 0;
     animation: text-enter {intro_ms}ms 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }}
-
+  .divider {{
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%, {accent_35} 30%, {accent_35} 70%, transparent 100%
+    );
+    margin-bottom: 32px;
+    opacity: 0; animation: fade-in {intro_ms}ms 200ms ease-out forwards;
+  }}
+  .sub-text {{
+    font-size: 46px; font-weight: 500;
+    color: #a0c0e0; line-height: 1.4;
+    opacity: 0; animation: fade-in {intro_ms}ms 300ms ease-out forwards;
+  }}
   @keyframes text-enter {{
     from {{ opacity: 0; transform: translateY(24px); }}
     to   {{ opacity: 1; transform: translateY(0); }}
   }}
-
   @keyframes fade-in {{
-    from {{ opacity: 0; }}
-    to   {{ opacity: 1; }}
+    from {{ opacity: 0; }} to {{ opacity: 1; }}
   }}
-
-  /* ボトムバー（記事情報） */
   .bottom-bar {{
-    position: absolute;
-    bottom: 56px;
-    left: 60px;
-    right: 60px;
+    position: absolute; bottom: 56px; left: 60px; right: 60px;
     background: rgba(10, 18, 38, 0.75);
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 20px;
-    padding: 22px 32px;
-    display: flex;
-    align-items: center;
-    gap: 18px;
+    border-radius: 20px; padding: 22px 32px;
+    display: flex; align-items: center; gap: 18px;
     backdrop-filter: blur(16px);
-    opacity: 0;
-    animation: fade-in {intro_ms}ms 350ms ease-out forwards;
+    opacity: 0; animation: fade-in {intro_ms}ms 350ms ease-out forwards;
   }}
-
-  .bottom-dot {{
-    width: 7px;
-    height: 7px;
-    min-width: 7px;
-    border-radius: 50%;
-    background: #00dcc2;
-  }}
-
-  .bottom-source {{
-    font-size: 26px;
-    font-weight: 700;
-    color: #a0b8d8;
-    white-space: nowrap;
-  }}
-
-  .bottom-url {{
-    font-size: 22px;
-    color: #4a6888;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }}
-
-  /* フェードオーバーレイ (JS で opacity を制御) */
+  .bottom-dot {{ width: 7px; height: 7px; min-width: 7px; border-radius: 50%; background: {accent}; }}
+  .bottom-source {{ font-size: 26px; font-weight: 700; color: #a0b8d8; white-space: nowrap; }}
+  .bottom-url {{ font-size: 22px; color: #4a6888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
   #fade {{
-    position: absolute;
-    inset: 0;
-    z-index: 100;
-    background: #000;
-    opacity: 1;
-    pointer-events: none;
-    transition: none;
+    position: absolute; inset: 0; z-index: 100;
+    background: #000; opacity: 1; pointer-events: none; transition: none;
   }}
 </style>
 </head>
 <body>
   <div class="bg"></div>
   <div class="bg-overlay"></div>
-
   <div class="content">
     <div class="card">
-      <div class="source-label">{source}</div>
+      <div class="news-badge"><span class="badge-dot"></span>TODAY'S TECH</div>
+      <div class="title-text">{display_title}</div>
       <div class="divider"></div>
-      <div class="main-text">{subtitle}</div>
+      <div class="sub-text">{subtitle}</div>
     </div>
   </div>
-
   <div class="bottom-bar">
     <div class="bottom-dot"></div>
     <span class="bottom-source">{source}</span>
     <span class="bottom-url">{source_url}</span>
   </div>
+  <div id="fade"></div>
+</body>
+</html>
+"""
 
+# 標準カード（main_* / outro セクション用）
+_STANDARD_CARD_TEMPLATE = """\
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    width: {width}px; height: {height}px;
+    background: #0d1117;
+    font-family: 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
+    overflow: hidden; position: relative;
+  }}
+  .bg {{
+    position: absolute; inset: 0;
+    background-image: url('{bg_data_url}');
+    background-size: cover; background-position: center;
+    filter: blur(12px) brightness(0.22) saturate(0.8);
+    transform: scale(1.06);
+  }}
+  .bg-overlay {{
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      rgba(5, 10, 30, 0.6) 0%, transparent 40%,
+      transparent 60%, rgba(5, 10, 30, 0.8) 100%
+    );
+  }}
+  .content {{
+    position: relative; z-index: 1; height: 100%;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 80px 70px;
+  }}
+  .card {{
+    width: 100%;
+    background: rgba(12, 22, 45, 0.82);
+    border: 1px solid {accent_18};
+    border-left: 4px solid {accent};
+    border-radius: 36px;
+    padding: 56px 60px 64px;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow:
+      0 0 0 1px {accent_08},
+      0 24px 80px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    animation: card-enter {intro_ms}ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }}
+  @keyframes card-enter {{
+    from {{ opacity: 0; transform: translateY(64px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
+  }}
+  .card-header {{
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 28px;
+    opacity: 0; animation: fade-in {intro_ms}ms 150ms ease-out forwards;
+  }}
+  .badge {{
+    font-size: 28px; font-weight: 700;
+    color: {accent};
+    letter-spacing: 0.12em; text-transform: uppercase;
+    border: 2px solid {accent_40};
+    padding: 8px 22px; border-radius: 10px;
+    background: {accent_08};
+  }}
+  .section-number {{
+    font-size: 64px; font-weight: 700;
+    color: {accent_20};
+    letter-spacing: 0.05em; line-height: 1;
+  }}
+  .divider {{
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 0%, {accent_35} 30%, {accent_35} 70%, transparent 100%
+    );
+    margin-bottom: 40px;
+    opacity: 0; animation: fade-in {intro_ms}ms 200ms ease-out forwards;
+  }}
+  .main-text {{
+    font-size: 72px; font-weight: 700;
+    color: #f0f4ff;
+    line-height: 1.4; letter-spacing: 0.01em;
+    opacity: 0;
+    animation: text-enter {intro_ms}ms 120ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }}
+  @keyframes text-enter {{
+    from {{ opacity: 0; transform: translateY(24px); }}
+    to   {{ opacity: 1; transform: translateY(0); }}
+  }}
+  @keyframes fade-in {{
+    from {{ opacity: 0; }} to {{ opacity: 1; }}
+  }}
+  .bottom-bar {{
+    position: absolute; bottom: 56px; left: 60px; right: 60px;
+    background: rgba(10, 18, 38, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 20px; padding: 22px 32px;
+    display: flex; align-items: center; gap: 18px;
+    backdrop-filter: blur(16px);
+    opacity: 0; animation: fade-in {intro_ms}ms 350ms ease-out forwards;
+  }}
+  .bottom-dot {{ width: 7px; height: 7px; min-width: 7px; border-radius: 50%; background: {accent}; }}
+  .bottom-source {{ font-size: 26px; font-weight: 700; color: #a0b8d8; white-space: nowrap; }}
+  .bottom-url {{ font-size: 22px; color: #4a6888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  #fade {{
+    position: absolute; inset: 0; z-index: 100;
+    background: #000; opacity: 1; pointer-events: none; transition: none;
+  }}
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="bg-overlay"></div>
+  <div class="content">
+    <div class="card">
+      <div class="card-header">
+        <div class="badge">{badge_text}</div>
+        <div class="section-number">{number_text}</div>
+      </div>
+      <div class="divider"></div>
+      <div class="main-text">{subtitle}</div>
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <div class="bottom-dot"></div>
+    <span class="bottom-source">{source}</span>
+    <span class="bottom-url">{source_url}</span>
+  </div>
   <div id="fade"></div>
 </body>
 </html>
 """
 
 # ---- ヘルパー ----------------------------------------------------------------
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """#RRGGBB → rgba(r, g, b, alpha)"""
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
 
 def _image_to_data_url(image_url: str) -> str | None:
     """記事画像をダウンロードして base64 data URL に変換する"""
@@ -240,20 +324,52 @@ def _image_to_data_url(image_url: str) -> str | None:
         return None
 
 
-def _build_html(subtitle_text: str, source: str, source_url: str, bg_data_url: str) -> str:
+def _build_html(
+    subtitle_text: str,
+    source: str,
+    source_url: str,
+    bg_data_url: str,
+    section_type: str = "main",
+    display_title: str = "",
+) -> str:
     """HTML文字列を組み立てる"""
-    return _HTML_TEMPLATE.format(
+    style = _SECTION_STYLES.get(section_type, _SECTION_STYLES["main"])
+    accent = style["accent"]
+    is_title = style.get("is_title", False)
+
+    common = dict(
         width=WIDTH,
         height=HEIGHT,
         intro_ms=int(INTRO_DURATION * 1000),
         bg_data_url=bg_data_url or "",
         source=source,
         source_url=source_url,
-        subtitle=subtitle_text,
+        subtitle=html_module.escape(subtitle_text),
+        accent=accent,
+        accent_08=_hex_to_rgba(accent, 0.08),
+        accent_12=_hex_to_rgba(accent, 0.12),
+        accent_18=_hex_to_rgba(accent, 0.18),
+        accent_20=_hex_to_rgba(accent, 0.20),
+        accent_35=_hex_to_rgba(accent, 0.35),
+        accent_40=_hex_to_rgba(accent, 0.40),
     )
 
+    if is_title:
+        return _TITLE_CARD_TEMPLATE.format(
+            display_title=html_module.escape(display_title or subtitle_text),
+            **common,
+        )
+    else:
+        return _STANDARD_CARD_TEMPLATE.format(
+            badge_text=html_module.escape(style.get("badge", "")),
+            number_text=html_module.escape(style.get("number", "")),
+            **common,
+        )
 
-async def _render_frames_async(html: str, times: list[float]) -> list[np.ndarray]:
+
+async def _render_frames_async(
+    html: str, times: list[float], outro_start: float, outro_duration: float
+) -> list[np.ndarray]:
     """Playwright で指定時刻リストのフレームをレンダリングする"""
     from playwright.async_api import async_playwright
 
@@ -267,17 +383,29 @@ async def _render_frames_async(html: str, times: list[float]) -> list[np.ndarray
         for t in times:
             # CSS/JS アニメーションを指定時刻にシークして停止
             await page.evaluate(
-                """(t) => {
+                """([t, outroStart, outroDuration]) => {
                     document.getAnimations({ subtree: true }).forEach(a => {
                         a.currentTime = t * 1000;
                         a.pause();
                     });
-                    // フェードオーバーレイ制御
+                    // フェードオーバーレイ制御（イントロ）
                     const fade = document.getElementById('fade');
-                    const fadeIn  = Math.max(0, 1 - t / 0.25);
-                    fade.style.opacity = fadeIn;
+                    fade.style.opacity = Math.max(0, 1 - t / 0.25);
+                    // カードのスクロールアップ（アウトロ）
+                    const content = document.querySelector('.content');
+                    const bottomBar = document.querySelector('.bottom-bar');
+                    if (t > outroStart) {
+                        const progress = Math.min(1, (t - outroStart) / outroDuration);
+                        const ease = progress * progress;
+                        const offsetPx = ease * 2000;
+                        content.style.transform = 'translateY(-' + offsetPx + 'px)';
+                        bottomBar.style.transform = 'translateY(-' + offsetPx + 'px)';
+                    } else {
+                        content.style.transform = '';
+                        bottomBar.style.transform = '';
+                    }
                 }""",
-                t,
+                [t, outro_start, outro_duration],
             )
             screenshot = await page.screenshot(type="png")
             img = Image.open(io.BytesIO(screenshot)).convert("RGB")
@@ -288,9 +416,11 @@ async def _render_frames_async(html: str, times: list[float]) -> list[np.ndarray
     return frames
 
 
-def _render_frames(html: str, times: list[float]) -> list[np.ndarray]:
+def _render_frames(
+    html: str, times: list[float], outro_start: float, outro_duration: float
+) -> list[np.ndarray]:
     """同期ラッパー"""
-    return asyncio.run(_render_frames_async(html, times))
+    return asyncio.run(_render_frames_async(html, times, outro_start, outro_duration))
 
 
 # ---- 公開 API ---------------------------------------------------------------
@@ -301,17 +431,23 @@ def generate_animated_clip(
     source_url: str,
     duration: float,
     image_url: str | None = None,
+    section_type: str = "main",
+    display_title: str = "",
 ) -> VideoClip:
     """HTML/CSS アニメーション付き moviepy VideoClip を返す
 
     intro/hold/outro の 3 ゾーンでフレームを最小限だけレンダリングし、
     hold フレームは複製することでパフォーマンスを確保する。
+    アウトロはカードが上方向へスクロールして退場する。
     """
     outro_start = max(INTRO_DURATION + 0.5, duration - OUTRO_DURATION)
 
     # 背景画像の準備
     bg_data_url = _image_to_data_url(image_url) if image_url else None
-    html = _build_html(subtitle_text, source, source_url, bg_data_url or "")
+    html = _build_html(
+        subtitle_text, source, source_url, bg_data_url or "",
+        section_type=section_type, display_title=display_title,
+    )
 
     # レンダリングが必要な時刻リスト
     intro_times = [i / FPS for i in range(int(INTRO_DURATION * FPS) + 1)]
@@ -323,7 +459,7 @@ def generate_animated_clip(
     all_times = intro_times + hold_times + outro_times
 
     logger.info("フレームレンダリング開始: %d 枚", len(all_times))
-    rendered = _render_frames(html, all_times)
+    rendered = _render_frames(html, all_times, outro_start, OUTRO_DURATION)
 
     # インデックス分割
     n_intro = len(intro_times)
@@ -335,17 +471,9 @@ def generate_animated_clip(
     n_hold = max(1, round((outro_start - INTRO_DURATION) * FPS))
     all_frames = intro_frames + [hold_frame] * n_hold + outro_frames
 
-    # フェードアウト中は黒オーバーレイを合成
-    def _apply_fade_out(frame: np.ndarray, t: float) -> np.ndarray:
-        if t <= outro_start:
-            return frame
-        ratio = min(1.0, (t - outro_start) / OUTRO_DURATION)
-        black = np.zeros_like(frame)
-        return (frame * (1 - ratio) + black * ratio).astype(np.uint8)
-
     def make_frame(t: float) -> np.ndarray:
         idx = min(int(t * FPS), len(all_frames) - 1)
-        return _apply_fade_out(all_frames[idx], t)
+        return all_frames[idx]
 
     logger.info("アニメーションクリップ準備完了: duration=%.1fs, frames=%d", duration, len(all_frames))
     return VideoClip(make_frame, duration=duration)
