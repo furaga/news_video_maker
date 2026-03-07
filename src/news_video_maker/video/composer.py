@@ -95,6 +95,20 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     return output_path
 
 
+def save_metadata(script: VideoScript, output_path: Path) -> Path:
+    """動画と同名の .json メタデータファイルを output/ に保存する"""
+    meta_path = output_path.with_suffix(".json")
+    meta = {
+        "title": script.title,
+        "source_url": script.source_url,
+        "image_url": script.image_url,
+        "video_path": str(output_path.resolve()),
+    }
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info("メタデータ保存完了: %s", meta_path)
+    return meta_path
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -107,11 +121,13 @@ def main():
     output_path = OUTPUT_DIR / f"{timestamp}.mp4"
 
     compose_video(script, output_path)
+    meta_path = save_metadata(script, output_path)
 
     # パスファイルに保存
     path_file = PIPELINE_DIR / "04_video_path.txt"
     path_file.write_text(str(output_path.resolve()), encoding="utf-8")
     print(f"動画生成完了: {output_path}")
+    print(f"メタデータ保存: {meta_path}")
 
 
 if __name__ == "__main__":
