@@ -77,42 +77,18 @@ _STACK_TEMPLATE = """\
       rgba(5, 10, 30, 0.3) 70%, rgba(5, 10, 30, 0.8) 100%
     );
   }}
-  /* 記事プレビューゾーン: 左=記事画像、右=ブランドカラー+見出し */
+  /* 記事プレビューゾーン: 記事ページのスクリーンショットを全幅表示 */
   .article-preview {{
     position: absolute;
     top: 0; left: 0; right: 0;
     height: {screenshot_height}px;
-    display: flex; flex-direction: row;
     z-index: 10;
+    overflow: hidden;
   }}
   .article-img-panel {{
-    width: 50%;
+    width: 100%; height: 100%;
     background-image: url('{bg_data_url}');
-    background-size: cover; background-position: center;
-  }}
-  .article-text-panel {{
-    width: 50%;
-    background: {source_color};
-    display: flex; flex-direction: column;
-    padding: 48px 40px;
-  }}
-  .article-source-label {{
-    font-size: 22px; font-weight: 700;
-    color: rgba(255,255,255,0.9);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-bottom: 36px;
-  }}
-  .article-title-preview {{
-    font-size: 44px; font-weight: 800;
-    color: #fff; line-height: 1.22;
-    flex: 1; overflow: hidden;
-  }}
-  .article-meta-preview {{
-    font-size: 20px;
-    color: rgba(255,255,255,0.65);
-    margin-top: 20px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background-size: 100% 100%;
   }}
   #stack {{
     position: absolute;
@@ -159,11 +135,6 @@ _STACK_TEMPLATE = """\
   <div class="bg-overlay"></div>
   <div class="article-preview">
     <div class="article-img-panel"></div>
-    <div class="article-text-panel">
-      <div class="article-source-label">{source}</div>
-      <div class="article-title-preview">{article_title}</div>
-      <div class="article-meta-preview">{source_domain}</div>
-    </div>
   </div>
   <div id="stack">
 {cards_html}
@@ -198,6 +169,130 @@ def image_to_data_url(image_url: str) -> str | None:
         return None
 
 
+_SCREENSHOT_VIEWPORT_W = 1200
+_SCREENSHOT_VIEWPORT_H = _SCREENSHOT_VIEWPORT_W * 2  # 2400px（横幅×2）
+
+
+_CLAUDE_PREVIEW_W = 600   # Claude に渡すプレビュー画像の幅（処理を軽くするため縮小）
+
+
+def _get_best_crop_y(orig_img: Image.Image) -> int:
+    """Claude Code (claude -p --allowedTools Read) で最適クロップY位置を返す。失敗時は 0。
+
+    orig_img: 元のフルページスクリーンショット（リサイズ前）
+    戻り値: 元画像座標でのクロップY位置
+    """
+    import os
+    import re
+    import subprocess
+    import tempfile
+
+    orig_w, orig_h = orig_img.size
+    panel_h_in_orig = int(SCREENSHOT_HEIGHT * orig_w / WIDTH)  # 元画像座標でのパネル高
+    max_y = orig_h - panel_h_in_orig
+    if max_y <= 0:
+        return 0
+
+    # Claude 用プレビュー画像を作成（幅を縮小してファイルサイズを削減）
+    preview_scale = _CLAUDE_PREVIEW_W / orig_w
+    preview_h = int(orig_h * preview_scale)
+    preview_img = orig_img.resize((_CLAUDE_PREVIEW_W, preview_h), Image.LANCZOS)
+    panel_h_in_preview = int(panel_h_in_orig * preview_scale)
+    max_y_preview = preview_h - panel_h_in_preview
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            preview_img.save(f, format="PNG")
+            tmp_path = f.name
+
+        prompt = (
+            f"Read the image at {tmp_path}. "
+            f"This is a news article page screenshot ({preview_h}px tall, {_CLAUDE_PREVIEW_W}px wide). "
+            f"I need a {panel_h_in_preview}px-tall crop for a short video thumbnail. "
+            f"Which Y offset (integer, 0 to {max_y_preview}) shows the most visually interesting content "
+            "(article hero image, main photo)? Skip navigation bars and headers. "
+            "Reply with ONLY a single integer."
+        )
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--allowedTools", "Read"],
+            capture_output=True, text=True, timeout=120,
+            env=env,
+        )
+        numbers = re.findall(r"\d+", result.stdout)
+        if not numbers:
+            raise ValueError(f"整数が見つからない: {result.stdout!r}")
+        y_preview = int(numbers[-1])
+        y_preview = max(0, min(y_preview, max_y_preview))
+        # プレビュー座標を元画像座標に変換
+        y_orig = int(y_preview / preview_scale)
+        return max(0, min(y_orig, max_y))
+    except Exception as e:
+        logger.warning("Claude Code クロップ判定失敗、y=0 にフォールバック: %s", e)
+        return 0
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
+async def _screenshot_article_url_async(url: str) -> str | None:
+    """Playwright でページ全体をキャプチャし、Claude Code で最適クロップして data URL を返す"""
+    from news_video_maker.config import IMAGES_DIR
+
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page(
+                viewport={"width": _SCREENSHOT_VIEWPORT_W, "height": _SCREENSHOT_VIEWPORT_H}
+            )
+            await page.goto(url, wait_until="load", timeout=30000)
+            # viewport 範囲のみキャプチャ（横幅×2高さ = 1200×2400px）
+            screenshot_bytes = await page.screenshot(type="png")
+            await browser.close()
+
+        # 元スクリーンショットを保存（デバッグ用）
+        orig_path = IMAGES_DIR / "article_screenshot_orig.png"
+        orig_path.write_bytes(screenshot_bytes)
+        img = Image.open(io.BytesIO(screenshot_bytes))
+        logger.info("スクリーンショット取得完了: %dx%d → %s", img.width, img.height, orig_path)
+
+        # Claude Code でベストクロップY位置を判定（元画像を渡す）
+        crop_y = _get_best_crop_y(img)
+        logger.info("クロップY位置: %d (元画像座標)", crop_y)
+
+        # Pillow でリサイズ → クロップ（WIDTH x SCREENSHOT_HEIGHT に整形）
+        scale = WIDTH / img.width
+        new_h = int(img.height * scale)
+        img_resized = img.resize((WIDTH, new_h), Image.LANCZOS)
+        crop_y_scaled = int(crop_y * scale)
+        img_cropped = img_resized.crop(
+            (0, crop_y_scaled, WIDTH, crop_y_scaled + SCREENSHOT_HEIGHT)
+        )
+
+        # クロップ済み画像を保存（デバッグ用）
+        crop_path = IMAGES_DIR / "article_screenshot_crop.png"
+        img_cropped.save(crop_path)
+        logger.info("クロップ済み画像保存: %s", crop_path)
+
+        buf = io.BytesIO()
+        img_cropped.save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        return f"data:image/png;base64,{b64}"
+    except Exception as e:
+        logger.warning("記事ページのスクリーンショット取得に失敗: %s", e)
+        return None
+
+
+def screenshot_article_url(url: str) -> str | None:
+    """記事ページのスクリーンショットを撮り base64 data URL を返す（同期ラッパー）"""
+    return asyncio.run(_screenshot_article_url_async(url))
+
+
 def _build_stack_html(
     all_cards: list[dict],
     active_index: int,
@@ -205,8 +300,6 @@ def _build_stack_html(
     source: str,
     source_url: str,
     bg_data_url: str,
-    article_title: str = "",
-    source_color: str = "#1a7f37",
 ) -> str:
     """全カードを縦積みにしたHTML文字列を組み立てる"""
     cards_html = ""
@@ -226,9 +319,6 @@ def _build_stack_html(
         card_gap=CARD_GAP,
         cards_html=cards_html,
         screenshot_height=SCREENSHOT_HEIGHT,
-        article_title=html_module.escape(article_title),
-        source_color=source_color,
-        source_domain=html_module.escape(source_url.split("/")[2] if source_url and "/" in source_url else source),
     )
 
 
@@ -328,21 +418,16 @@ def generate_stack_clip(
     source_url: str,
     duration: float,
     bg_data_url: str = "",
-    article_title: str = "",
-    source_color: str = "#1a7f37",
 ) -> VideoClip:
     """全カードを縦積みにして、active_index のカードを中央に表示する VideoClip を返す。
 
     all_cards: [{"subtitle": str, "type": str}] のリスト（全セクション分）
     active_index: 現在表示するカードのインデックス
     prev_index: ひとつ前のカードのインデックス（スクロールアニメーション用）
-    article_title: 記事プレビューゾーンに表示する記事見出し
     """
     html = _build_stack_html(
         all_cards, active_index, prev_index,
         source, source_url, bg_data_url,
-        article_title=article_title,
-        source_color=source_color,
     )
 
     # イントロ + ホールドの2段階レンダリング

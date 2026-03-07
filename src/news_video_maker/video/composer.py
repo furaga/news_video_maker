@@ -9,7 +9,7 @@ from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_stack_clip, image_to_data_url
+from news_video_maker.video.visuals import generate_stack_clip, image_to_data_url, screenshot_article_url
 
 logger = logging.getLogger(__name__)
 
@@ -55,23 +55,12 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
     source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
 
-    # 02_selected.json から英語タイトルとブランドカラーを取得
-    source_colors = {
-        "techcrunch": "#1a7f37",
-        "arstechnica": "#dd3333",
-        "theverge": "#fa4718",
-        "hackernews": "#ff6600",
-    }
-    article_title_en = script.title
-    source_color = "#1a4a8a"
-    selected_path = PIPELINE_DIR / "02_selected.json"
-    if selected_path.exists():
-        selected = json.loads(selected_path.read_text(encoding="utf-8"))
-        article_title_en = selected.get("title", selected.get("title_en", script.title))
-        source_color = source_colors.get(selected.get("source", ""), "#1a4a8a")
-
-    # 背景画像を一度だけダウンロード
-    bg_data_url = image_to_data_url(script.image_url) if script.image_url else ""
+    # 記事ページのスクリーンショットを取得（image_url がなければ source_url からスクリーンショット）
+    if script.image_url:
+        bg_data_url = image_to_data_url(script.image_url) or ""
+    else:
+        logger.info("記事URLからスクリーンショットを取得: %s", script.source_url)
+        bg_data_url = screenshot_article_url(script.source_url) or ""
 
     # 全セクションのカードデータを事前収集
     all_cards = [
@@ -100,8 +89,6 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             source_url=script.source_url,
             duration=duration,
             bg_data_url=bg_data_url or "",
-            article_title=article_title_en,
-            source_color=source_color,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
