@@ -6,7 +6,8 @@
 
 ## 対応コマンド
 
-`.claude/commands/upload-youtube.md` → `/upload`
+- `.claude/commands/generate-metadata.md` → `/gen-metadata`（メタデータ単独生成）
+- `.claude/commands/upload-youtube.md` → `/upload`（メタデータ生成 + アップロード）
 
 ## 担当
 
@@ -18,7 +19,10 @@ Python（google-api-python-client）
 ## 入力
 
 - **動画パス**: `.cache/pipeline/04_video_path.txt`（動画ファイルの絶対パス）
-- **メタデータ**: `.cache/pipeline/02_selected.json`（タイトル・要約・ソースURL）と `.cache/pipeline/03_script.json`（動画タイトル）
+- **記事データ**: `.cache/pipeline/02_selected.json`（タイトル・要約・ソースURL）と `.cache/pipeline/03_script.json`（動画タイトル）
+- **メタデータ（LLM生成）**: `.cache/pipeline/05_metadata.json`（説明文・タグ）
+  - `/upload` コマンドのステップ1で自動生成される
+  - 存在しない場合はフォールバック動作（後述）
 
 ---
 
@@ -53,13 +57,36 @@ YouTube Data API v3 は OAuth 2.0 で認証する。
 | フィールド | 値 |
 |---|---|
 | タイトル | `03_script.json` の `title`（最大 100 文字） |
-| 説明文 | 下記テンプレート参照 |
-| タグ | `["tech news", "テックニュース", "テクノロジー", "ShortNews", {source}]` |
+| 説明文 | `05_metadata.json` の `description`（なければフォールバックテンプレート） |
+| タグ | `05_metadata.json` の `tags`（なければハードコードリスト） |
 | カテゴリ ID | `28`（Science & Technology） |
 | プライバシー | 設定値（デフォルト: `unlisted`） |
 | 字幕言語 | `ja` |
 
-### 説明文テンプレート
+### 説明文（LLM生成・`05_metadata.json` の `description`）
+
+`/upload` コマンドのLLMステップが以下の構成で生成する:
+
+```
+{記事の核心を端的に表す文（50文字以内）}
+
+・{key_points[0]}
+・{key_points[1]}
+・{key_points[2]}
+
+{related_research から最も興味深い補足情報1文}
+
+元記事: {source_url}
+
+---
+このチャンネルでは海外テックニュースを日本語で毎日お届けします。
+
+#テックニュース #テクノロジー #ShortNews #Shorts
+```
+
+合計500文字以内。`key_points` が空の場合はその行をスキップ。
+
+### 説明文フォールバックテンプレート（`05_metadata.json` が存在しない場合）
 
 ```
 {japanese_summary}
@@ -80,10 +107,31 @@ YouTube Data API v3 は OAuth 2.0 で認証する。
 
 ---
 
+## 05_metadata.json スキーマ
+
+`/upload` コマンドのLLMステップが生成するメタデータファイル。
+
+| フィールド | 型 | 制約 |
+|---|---|---|
+| `description` | string | 500文字以内 |
+| `tags` | string[] | 15〜20個、各30文字以内 |
+| `generated_at` | string | ISO 8601 |
+
+```json
+{
+  "description": "SEO最適化された説明文",
+  "tags": ["タグ1", "タグ2", "..."],
+  "generated_at": "2026-03-07T15:00:00"
+}
+```
+
+---
+
 ## 振る舞い
 
-1. 入力ファイルを読み込む
-2. OAuth 2.0 認証（`token.json` があれば自動）
+1. `05_metadata.json` が存在すれば `description` と `tags` を読み込む（パース失敗時はフォールバック）
+2. 入力ファイル（動画パス・記事データ）を読み込む
+3. OAuth 2.0 認証（`token.json` があれば自動）
 3. YouTube Data API v3 の `videos.insert` でアップロード
    - **Resumable Upload** を使用（大容量ファイルに対応）
 4. 進捗を表示（アップロード中）

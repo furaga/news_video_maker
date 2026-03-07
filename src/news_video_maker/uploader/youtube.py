@@ -144,15 +144,26 @@ def main():
     source_url = selected.get("url", "")
     summary = selected.get("japanese_summary", "")
 
-    description = (
-        f"{summary}\n\n"
-        f"元記事: {source_url}\n\n"
-        "---\n"
-        "このチャンネルでは海外テックニュースを日本語で毎日お届けします。\n\n"
-        "#テックニュース #テクノロジー #ShortNews"
-    )
-
-    tags = ["tech news", "テックニュース", "テクノロジー", "ShortNews", source]
+    # 05_metadata.json があれば優先使用、なければフォールバック
+    metadata_path = PIPELINE_DIR / "05_metadata.json"
+    try:
+        if metadata_path.exists():
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            description = metadata["description"]
+            tags = metadata["tags"]
+            logger.info("05_metadata.json からメタデータを読み込みました")
+        else:
+            raise FileNotFoundError("05_metadata.json が存在しません")
+    except Exception as e:
+        logger.warning("メタデータ読み込み失敗。フォールバックを使用します: %s", e)
+        description = (
+            f"{summary}\n\n"
+            f"元記事: {source_url}\n\n"
+            "---\n"
+            "このチャンネルでは海外テックニュースを日本語で毎日お届けします。\n\n"
+            "#テックニュース #テクノロジー #ShortNews"
+        )
+        tags = ["tech news", "テックニュース", "テクノロジー", "ShortNews", source]
 
     url = upload_video(video_path, title, description, tags)
 

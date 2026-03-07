@@ -37,10 +37,14 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 ```
 
 ### ステージ 5: YouTube 投稿
-`--dry-run` でない場合かつ `--from-stage` が 5 以下の場合:
-```bash
-cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.uploader.youtube
-```
+`--dry-run` でない場合かつ `--from-stage` が 5 以下の場合、以下を順に実行:
+
+1. **メタデータ生成**: `/gen-metadata` コマンドと同じ手順を実行し `.cache/pipeline/05_metadata.json` に保存
+
+2. **YouTube アップロード（Python実行）**:
+   ```bash
+   cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.uploader.youtube
+   ```
 
 ## 完了後
 
