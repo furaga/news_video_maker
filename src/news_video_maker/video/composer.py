@@ -2,6 +2,7 @@
 import base64
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,50 @@ from news_video_maker.video.visuals import (
     screenshot_article_url,
     split_into_subtitle_chunks,
 )
+
+
+def _split_display_text(display_text: str, max_chars: int = 26) -> list[str]:
+    """**keyword** マークアップを保持しながら字幕チャンク分割する。
+
+    マークアップなし版でチャンク位置を決め、対応するマークアップ付きテキストを抽出する。
+    """
+    clean = re.sub(r'\*\*(.+?)\*\*', r'\1', display_text)
+    clean_chunks = split_into_subtitle_chunks(clean, max_chars)
+
+    result = []
+    orig_pos = 0
+
+    for chunk in clean_chunks:
+        markup_chunk = ""
+        consumed = 0
+        i = orig_pos
+
+        while consumed < len(chunk) and i < len(display_text):
+            m = re.match(r'\*\*(.+?)\*\*', display_text[i:])
+            if m:
+                kw = m.group(1)
+                if consumed + len(kw) <= len(chunk):
+                    markup_chunk += m.group(0)
+                    consumed += len(kw)
+                    i += len(m.group(0))
+                else:
+                    # キーワードがチャンク境界をまたぐ（まれ）→ プレーンテキストとして分割
+                    needed = len(chunk) - consumed
+                    markup_chunk += kw[:needed]
+                    consumed += needed
+            else:
+                markup_chunk += display_text[i]
+                consumed += 1
+                i += 1
+
+        result.append(markup_chunk)
+        orig_pos = i
+
+    # 残りがあれば追加
+    if orig_pos < len(display_text) and display_text[orig_pos:].strip():
+        result.append(display_text[orig_pos:].strip())
+
+    return result if result else [display_text]
 
 
 def _calc_chunk_durations(chunks: list[str], total_duration: float) -> list[float]:
@@ -40,6 +85,7 @@ class ScriptSection:
     subtitle_text: str
     estimated_duration_sec: float
     bg_prompt: str = field(default="")
+    display_text: str = field(default="")  # 字幕表示用（**keyword** マークアップ、原語表記）
 
 
 @dataclass
@@ -60,6 +106,7 @@ def load_script(path: Path) -> VideoScript:
             subtitle_text=s["subtitle_text"],
             estimated_duration_sec=s["estimated_duration_sec"],
             bg_prompt=s.get("bg_prompt", ""),
+            display_text=s.get("display_text", ""),
         )
         for s in data["sections"]
     ]
@@ -167,8 +214,11 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             bg_idx = i % len(bg_list)
             bg_data_url = bg_list[bg_idx]
 
-        # narration_text を字幕チャンクに分割して時間配分
-        chunks = split_into_subtitle_chunks(section.narration_text)
+        # 字幕チャンク生成: display_text があればマークアップ保持で分割、なければ narration_text を使用
+        if section.display_text:
+            chunks = _split_display_text(section.display_text)
+        else:
+            chunks = split_into_subtitle_chunks(section.narration_text)
         chunk_durs = _calc_chunk_durations(chunks, duration)
 
         audio = AudioFileClip(str(wav_path))
@@ -177,8 +227,6 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             subtitle_chunks=chunks,
             chunk_durations=chunk_durs,
             bg_data_url=bg_data_url,
-            source=source_name,
-            source_url=script.source_url,
             duration=duration,
             section_start=section_start,
             total_duration=total_duration,
