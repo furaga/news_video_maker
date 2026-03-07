@@ -85,6 +85,7 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             source_url=script.source_url,
             duration=duration,
             bg_data_url=bg_data_url or "",
+            article_title=script.title,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)

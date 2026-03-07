@@ -21,6 +21,10 @@ CARD_HEIGHT = 280    # 固定カード高（px）
 CARD_GAP = 60        # カード間隔（px）
 CARD_STEP = CARD_HEIGHT + CARD_GAP  # 340px
 
+# 上ゾーン（記事プレビュー）の定数
+SCREENSHOT_HEIGHT = 700  # 記事プレビューゾーンの高さ（px）
+STACK_CENTER = SCREENSHOT_HEIGHT + (HEIGHT - SCREENSHOT_HEIGHT) // 2  # = 1310
+
 # セクションタイプごとのアクセントカラー定義
 _SECTION_STYLES: dict[str, dict] = {
     "hook":   {"accent": "#00dcc2"},
@@ -63,10 +67,54 @@ _STACK_TEMPLATE = """\
       rgba(5, 10, 30, 0.3) 70%, rgba(5, 10, 30, 0.8) 100%
     );
   }}
+  /* --- 記事プレビューゾーン (上ゾーン: 0〜{screenshot_height}px) --- */
+  .article-preview {{
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: {screenshot_height}px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    z-index: 10;
+  }}
+  .browser-chrome {{
+    flex-shrink: 0;
+    height: 60px;
+    background: #1e2433;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 24px;
+  }}
+  .chrome-dot {{ width: 14px; height: 14px; border-radius: 50%; }}
+  .chrome-dot.red    {{ background: #ff5f57; }}
+  .chrome-dot.yellow {{ background: #ffbd2e; }}
+  .chrome-dot.green  {{ background: #28c940; }}
+  .chrome-urlbar {{
+    flex: 1; height: 34px;
+    background: #0d1117; border-radius: 8px;
+    display: flex; align-items: center; padding: 0 14px;
+    font-size: 22px; color: #6a7a8a;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }}
+  .article-image {{
+    flex: 1;
+    background-image: url('{bg_data_url}');
+    background-size: cover; background-position: center top;
+  }}
+  .article-headline {{
+    flex-shrink: 0;
+    min-height: 210px;
+    background: rgba(10, 15, 30, 0.92);
+    padding: 24px 48px;
+    display: flex; align-items: center;
+    font-size: 52px; font-weight: 700;
+    color: #f0f4ff; line-height: 1.45;
+    border-top: 2px solid rgba(0, 220, 194, 0.35);
+    overflow: hidden;
+  }}
   #stack {{
     position: absolute;
     left: 70px; right: 70px;
-    top: 0;
+    top: {screenshot_height}px;
   }}
   .card {{
     height: {card_height}px;
@@ -106,6 +154,16 @@ _STACK_TEMPLATE = """\
 <body>
   <div class="bg"></div>
   <div class="bg-overlay"></div>
+  <div class="article-preview">
+    <div class="browser-chrome">
+      <div class="chrome-dot red"></div>
+      <div class="chrome-dot yellow"></div>
+      <div class="chrome-dot green"></div>
+      <div class="chrome-urlbar">{source_url}</div>
+    </div>
+    <div class="article-image"></div>
+    <div class="article-headline">{article_title}</div>
+  </div>
   <div id="stack">
 {cards_html}
   </div>
@@ -146,6 +204,7 @@ def _build_stack_html(
     source: str,
     source_url: str,
     bg_data_url: str,
+    article_title: str = "",
 ) -> str:
     """全カードを縦積みにしたHTML文字列を組み立てる"""
     cards_html = ""
@@ -164,6 +223,8 @@ def _build_stack_html(
         card_height=CARD_HEIGHT,
         card_gap=CARD_GAP,
         cards_html=cards_html,
+        screenshot_height=SCREENSHOT_HEIGHT,
+        article_title=html_module.escape(article_title),
     )
 
 
@@ -185,13 +246,13 @@ async def _render_stack_frames_async(
 
         for t in times:
             await page.evaluate(
-                """([t, prevIdx, activeIdx, introDuration, cardStep, halfH, cardHalfH]) => {
+                """([t, prevIdx, activeIdx, introDuration, cardStep, stackCenter, cardHalfH]) => {
                     const stack = document.getElementById('stack');
                     const cards = stack.querySelectorAll('.card');
                     const fade = document.getElementById('fade');
 
-                    const prevOffset = halfH - (prevIdx * cardStep + cardHalfH);
-                    const currentOffset = halfH - (activeIdx * cardStep + cardHalfH);
+                    const prevOffset = stackCenter - (prevIdx * cardStep + cardHalfH);
+                    const currentOffset = stackCenter - (activeIdx * cardStep + cardHalfH);
 
                     let offset, progress;
                     if (prevIdx === activeIdx) {
@@ -232,7 +293,7 @@ async def _render_stack_frames_async(
                     });
                 }""",
                 [t, prev_index, active_index, INTRO_DURATION,
-                 CARD_STEP, HEIGHT // 2, CARD_HEIGHT // 2],
+                 CARD_STEP, STACK_CENTER, CARD_HEIGHT // 2],
             )
             screenshot = await page.screenshot(type="png")
             img = Image.open(io.BytesIO(screenshot)).convert("RGB")
@@ -263,14 +324,16 @@ def generate_stack_clip(
     source_url: str,
     duration: float,
     bg_data_url: str = "",
+    article_title: str = "",
 ) -> VideoClip:
     """全カードを縦積みにして、active_index のカードを中央に表示する VideoClip を返す。
 
     all_cards: [{"subtitle": str, "type": str}] のリスト（全セクション分）
     active_index: 現在表示するカードのインデックス
     prev_index: ひとつ前のカードのインデックス（スクロールアニメーション用）
+    article_title: 記事プレビューゾーンに表示する記事見出し
     """
-    html = _build_stack_html(all_cards, active_index, prev_index, source, source_url, bg_data_url)
+    html = _build_stack_html(all_cards, active_index, prev_index, source, source_url, bg_data_url, article_title)
 
     # イントロ + ホールドの2段階レンダリング
     intro_times = [i / FPS for i in range(int(INTRO_DURATION * FPS) + 1)]
