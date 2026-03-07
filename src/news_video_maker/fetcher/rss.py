@@ -15,6 +15,7 @@ from news_video_maker.config import (
     PIPELINE_DIR,
 )
 from news_video_maker.fetcher.models import NewsArticle
+from news_video_maker.history import HistoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -105,9 +106,10 @@ def _fetch_full_text(url: str) -> str:
 
 
 def fetch_articles() -> list[NewsArticle]:
-    """全フィードから記事を取得してリストで返す"""
+    """全フィードから記事を取得してリストで返す。全件処理済みの場合は空リストを返す"""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=FETCH_HOURS)
-    seen_urls: set[str] = set()
+    seen_urls: set[str] = HistoryStore().seen_urls()  # 投稿済みURLで初期化
+    total_valid = 0  # 時刻・URL形式チェック通過数（dedup前）
     articles: list[NewsArticle] = []
 
     for feed_url in FEEDS:
@@ -126,7 +128,11 @@ def fetch_articles() -> list[NewsArticle]:
                     continue
 
                 url = entry.get("link", "")
-                if not url or url in seen_urls:
+                if not url:
+                    continue
+                total_valid += 1  # 有効な記事としてカウント（dedup前）
+
+                if url in seen_urls:
                     continue
                 seen_urls.add(url)
 
@@ -154,8 +160,12 @@ def fetch_articles() -> list[NewsArticle]:
             logger.warning("フィード処理エラー %s: %s", feed_url, e)
             continue
 
-    if not articles:
+    if total_valid == 0:
         raise RuntimeError("全フィードから記事を取得できませんでした")
+
+    if not articles:
+        logger.info("新規記事なし（全 %d 件が処理済み）", total_valid)
+        return []
 
     articles.sort(key=lambda a: a.published_at, reverse=True)
     return articles[:MAX_ARTICLES]
@@ -183,6 +193,10 @@ def main():
     logger.info("RSSフィードから記事を取得中...")
     articles = fetch_articles()
     output = PIPELINE_DIR / "01_articles.json"
+    if not articles:
+        save_articles([], output)
+        print("新規記事なし: 全記事が処理済みです")
+        return
     save_articles(articles, output)
     print(f"取得完了: {len(articles)} 件 → {output}")
 
