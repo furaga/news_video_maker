@@ -364,19 +364,21 @@ async def _render_frames_async(
                     });
                     // フェードオーバーレイ制御（イントロ）
                     const fade = document.getElementById('fade');
-                    fade.style.opacity = Math.max(0, 1 - t / 0.25);
+                    if (fade) fade.style.opacity = Math.max(0, 1 - t / 0.25);
                     // カードのスクロールアップ（アウトロ）
                     const content = document.querySelector('.content');
                     const bottomBar = document.querySelector('.bottom-bar');
-                    if (t > outroStart) {
-                        const progress = Math.min(1, (t - outroStart) / outroDuration);
-                        const ease = progress * progress;
-                        const offsetPx = ease * 2000;
-                        content.style.transform = 'translateY(-' + offsetPx + 'px)';
-                        bottomBar.style.transform = 'translateY(-' + offsetPx + 'px)';
-                    } else {
-                        content.style.transform = '';
-                        bottomBar.style.transform = '';
+                    if (content && bottomBar) {
+                        if (t > outroStart) {
+                            const progress = Math.min(1, (t - outroStart) / outroDuration);
+                            const ease = progress * progress;
+                            const offsetPx = ease * 2000;
+                            content.style.transform = 'translateY(-' + offsetPx + 'px)';
+                            bottomBar.style.transform = 'translateY(-' + offsetPx + 'px)';
+                        } else {
+                            content.style.transform = '';
+                            bottomBar.style.transform = '';
+                        }
                     }
                 }""",
                 [t, outro_start, outro_duration],
