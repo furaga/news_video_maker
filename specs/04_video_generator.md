@@ -56,16 +56,29 @@ Python（VOICEVOX + moviepy + Pillow）
 
 VOICEVOX の話者 ID は `config.py` で設定可能にする。
 
-### ステップ2: 背景画像生成（Pillow）
+### ステップ2: 背景画像生成
 
-`src/news_video_maker/video/visuals.py` が担当。
+`src/news_video_maker/video/background.py` と `src/news_video_maker/video/visuals.py` が担当。
 
-各セクションの背景テキストカード（PNG）を生成する:
+背景画像の優先順位（`composer.py` で制御）:
 
-- サイズ: 1080 × 1920 px
-- 背景（優先順）:
-  1. `image_url` が指定されている場合: 記事画像をダウンロードして Cover crop（1080×1920）し、半透明の黒オーバーレイ（透明度 55%）を重ねる
-  2. 画像なし・取得失敗の場合: グラデーション（紺色 → 深青）にフォールバック
+1. `image_url` が指定されている場合: 記事画像をダウンロードして base64 化
+2. `image_url` 未指定または取得失敗の場合: **Stable Diffusion（SD 1.5）でAI生成**
+   - モデル: `runwayml/stable-diffusion-v1-5`（Hugging Face diffusers、ローカル・無料）
+   - 生成サイズ: 576×1024（9:16）→ PIL で 1080×1920 にリサイズ
+   - キャッシュ: `.cache/images/bg_generated.png`
+   - 初回実行時のみモデルダウンロード（~4GB）
+   - `diffusers` 未インストールの場合はスキップして次のフォールバックへ
+3. AI生成も失敗した場合: 暗い青 CSS グラデーション（既存動作）
+
+#### Ken Burns 効果
+
+`visuals.py` の Playwright レンダリング時に `.bg` 要素のズームを時間経過で変化させる:
+
+- 動画開始時: `transform: scale(1.06)`
+- 動画終了時: `transform: scale(1.14)`
+- 計算式: `scale = 1.06 + 0.08 * (globalTime / totalDuration)`
+- `globalTime` = 動画全体での絶対時刻（セクション開始時刻 + セクション内経過時刻）
 - テキスト: `subtitle_text` を中央寄せで表示
   - フォント: システムの日本語フォント（`C:/Windows/Fonts/meiryo.ttc` または `YuGothic`）
   - フォントサイズ: 72px

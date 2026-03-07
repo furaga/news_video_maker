@@ -1,4 +1,5 @@
 """moviepy 動画合成"""
+import base64
 import json
 import logging
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from pathlib import Path
 from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
+from news_video_maker.video.background import generate_background_image
 from news_video_maker.video.tts import synthesize
 from news_video_maker.video.visuals import generate_stack_clip, image_to_data_url, screenshot_article_url
 
@@ -55,12 +57,33 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
     source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
 
-    # 記事ページのスクリーンショットを取得（image_url がなければ source_url からスクリーンショット）
-    if script.image_url:
-        bg_data_url = image_to_data_url(script.image_url) or ""
-    else:
+    # 02_selected.json から英語タイトルとブランドカラーを取得
+    source_colors = {
+        "techcrunch": "#1a7f37",
+        "arstechnica": "#dd3333",
+        "theverge": "#fa4718",
+        "hackernews": "#ff6600",
+    }
+    article_title_en = script.title
+    source_color = "#1a4a8a"
+    selected_path = PIPELINE_DIR / "02_selected.json"
+    if selected_path.exists():
+        selected = json.loads(selected_path.read_text(encoding="utf-8"))
+        article_title_en = selected.get("title", selected.get("title_en", script.title))
+        source_color = source_colors.get(selected.get("source", ""), "#1a4a8a")
+
+    # 背景画像を一度だけ取得（記事画像 → 記事スクリーンショット → AI生成 → フォールバック）
+    bg_data_url = image_to_data_url(script.image_url) if script.image_url else ""
+    if not bg_data_url:
         logger.info("記事URLからスクリーンショットを取得: %s", script.source_url)
         bg_data_url = screenshot_article_url(script.source_url) or ""
+    if not bg_data_url:
+        bg_path = generate_background_image(
+            article_title_en,
+            PIPELINE_DIR.parent / "images" / "bg_generated.png",
+        )
+        if bg_path:
+            bg_data_url = f"data:image/png;base64,{base64.b64encode(bg_path.read_bytes()).decode()}"
 
     # 全セクションのカードデータを事前収集
     all_cards = [
@@ -68,19 +91,30 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         for s in script.sections
     ]
 
-    clips = []
+    # 全セクションの音声を先に合成して total_duration を確定
+    wav_paths = []
+    durations = []
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
-
-        # 音声合成
         wav_path = AUDIO_DIR / f"{name}.wav"
         synthesize(section.narration_text, wav_path)
+        audio = AudioFileClip(str(wav_path))
+        wav_paths.append(wav_path)
+        durations.append(audio.duration)
+        audio.close()
+
+    total_duration = sum(durations)
+
+    clips = []
+    section_start = 0.0
+    for i, section in enumerate(script.sections):
+        name = f"{i:02d}_{section.type}"
+        wav_path = wav_paths[i]
+        duration = durations[i]
+        prev_index = i - 1 if i > 0 else 0
 
         # スタッククリップ生成
         audio = AudioFileClip(str(wav_path))
-        duration = audio.duration
-        prev_index = i - 1 if i > 0 else 0
-
         video_clip = generate_stack_clip(
             all_cards=all_cards,
             active_index=i,
@@ -89,9 +123,14 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             source_url=script.source_url,
             duration=duration,
             bg_data_url=bg_data_url or "",
+            article_title=article_title_en,
+            source_color=source_color,
+            section_start=section_start,
+            total_duration=total_duration,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
+        section_start += duration
 
     # 全セクションを結合
     final = concatenate_videoclips(clips)
