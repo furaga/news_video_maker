@@ -327,6 +327,8 @@ async def _render_stack_frames_async(
     times: list[float],
     active_index: int,
     prev_index: int,
+    section_start: float = 0.0,
+    total_duration: float = 60.0,
 ) -> list[np.ndarray]:
     """Playwright でスタックフレームをレンダリングする"""
     from playwright.async_api import async_playwright
@@ -340,7 +342,7 @@ async def _render_stack_frames_async(
 
         for t in times:
             await page.evaluate(
-                """([t, prevIdx, activeIdx, introDuration, cardStep, stackCenter, cardHalfH]) => {
+                """([t, prevIdx, activeIdx, introDuration, cardStep, stackCenter, cardHalfH, sectionStart, totalDuration]) => {
                     const stack = document.getElementById('stack');
                     const cards = stack.querySelectorAll('.card');
                     const fade = document.getElementById('fade');
@@ -385,9 +387,16 @@ async def _render_stack_frames_async(
                         }
                         card.style.opacity = opacity;
                     });
+
+                    // Ken Burns: 背景をゆっくりズーム（全体で 1.06 → 1.14）
+                    const globalT = sectionStart + t;
+                    const bgScale = 1.06 + 0.08 * (globalT / totalDuration);
+                    const bgEl = document.querySelector('.bg');
+                    if (bgEl) bgEl.style.transform = 'scale(' + bgScale + ')';
                 }""",
                 [t, prev_index, active_index, INTRO_DURATION,
-                 CARD_STEP, STACK_CENTER, CARD_HEIGHT // 2],
+                 CARD_STEP, STACK_CENTER, CARD_HEIGHT // 2,
+                 section_start, total_duration],
             )
             screenshot = await page.screenshot(type="png")
             img = Image.open(io.BytesIO(screenshot)).convert("RGB")
@@ -403,9 +412,13 @@ def _render_stack_frames(
     times: list[float],
     active_index: int,
     prev_index: int,
+    section_start: float = 0.0,
+    total_duration: float = 60.0,
 ) -> list[np.ndarray]:
     """同期ラッパー"""
-    return asyncio.run(_render_stack_frames_async(html, times, active_index, prev_index))
+    return asyncio.run(_render_stack_frames_async(
+        html, times, active_index, prev_index, section_start, total_duration
+    ))
 
 
 # ---- 公開 API ---------------------------------------------------------------
@@ -418,6 +431,10 @@ def generate_stack_clip(
     source_url: str,
     duration: float,
     bg_data_url: str = "",
+    article_title: str = "",
+    source_color: str = "#1a7f37",
+    section_start: float = 0.0,
+    total_duration: float = 60.0,
 ) -> VideoClip:
     """全カードを縦積みにして、active_index のカードを中央に表示する VideoClip を返す。
 
@@ -437,7 +454,9 @@ def generate_stack_clip(
 
     logger.info("スタックフレームレンダリング開始: card=%d/%d, frames=%d",
                 active_index + 1, len(all_cards), len(all_times))
-    rendered = _render_stack_frames(html, all_times, active_index, prev_index)
+    rendered = _render_stack_frames(
+        html, all_times, active_index, prev_index, section_start, total_duration
+    )
 
     intro_frames = rendered[:len(intro_times)]
     hold_frame = rendered[len(intro_times)]
