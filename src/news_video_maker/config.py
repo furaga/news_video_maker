@@ -10,6 +10,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.parent.parent
 CACHE_DIR = BASE_DIR / ".cache"
 PIPELINE_DIR = CACHE_DIR / "pipeline"
+HISTORY_PATH = CACHE_DIR / "history.json"
 AUDIO_DIR = CACHE_DIR / "audio"
 IMAGES_DIR = CACHE_DIR / "images"
 OUTPUT_DIR = BASE_DIR / "output"
