@@ -6,11 +6,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from moviepy import AudioFileClip, ImageClip, concatenate_videoclips
+from moviepy import AudioFileClip, concatenate_videoclips
 
-from news_video_maker.config import AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, PIPELINE_DIR
+from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_text_card
+from news_video_maker.video.visuals import generate_animated_clip
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,8 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
     clips = []
 
+    source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
+
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
 
@@ -63,21 +65,17 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         wav_path = AUDIO_DIR / f"{name}.wav"
         synthesize(section.narration_text, wav_path)
 
-        # 画像生成
-        png_path = IMAGES_DIR / f"{name}.png"
-        source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
-        generate_text_card(
-            section.subtitle_text,
-            source_name,
-            png_path,
-            image_url=script.image_url or None,
-        )
-
-        # クリップ合成
+        # アニメーションクリップ生成
         audio = AudioFileClip(str(wav_path))
         duration = audio.duration
-        image_clip = ImageClip(str(png_path), duration=duration)
-        video_clip = image_clip.with_audio(audio)
+        video_clip = generate_animated_clip(
+            section.subtitle_text,
+            source_name,
+            script.source_url,
+            duration,
+            image_url=script.image_url or None,
+        )
+        video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
 
     # 全セクションを結合
