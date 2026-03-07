@@ -6,11 +6,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from moviepy import AudioFileClip, ImageClip, concatenate_videoclips
+from moviepy import AudioFileClip, concatenate_videoclips
 
-from news_video_maker.config import AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, PIPELINE_DIR
+from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_text_card
+from news_video_maker.video.visuals import generate_animated_clip
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,8 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
     clips = []
 
+    source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
+
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
 
@@ -63,21 +65,17 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         wav_path = AUDIO_DIR / f"{name}.wav"
         synthesize(section.narration_text, wav_path)
 
-        # 画像生成
-        png_path = IMAGES_DIR / f"{name}.png"
-        source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
-        generate_text_card(
-            section.subtitle_text,
-            source_name,
-            png_path,
-            image_url=script.image_url or None,
-        )
-
-        # クリップ合成
+        # アニメーションクリップ生成
         audio = AudioFileClip(str(wav_path))
         duration = audio.duration
-        image_clip = ImageClip(str(png_path), duration=duration)
-        video_clip = image_clip.with_audio(audio)
+        video_clip = generate_animated_clip(
+            section.subtitle_text,
+            source_name,
+            script.source_url,
+            duration,
+            image_url=script.image_url or None,
+        )
+        video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
 
     # 全セクションを結合
@@ -95,6 +93,20 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     return output_path
 
 
+def save_metadata(script: VideoScript, output_path: Path) -> Path:
+    """動画と同名の .json メタデータファイルを output/ に保存する"""
+    meta_path = output_path.with_suffix(".json")
+    meta = {
+        "title": script.title,
+        "source_url": script.source_url,
+        "image_url": script.image_url,
+        "video_path": str(output_path.resolve()),
+    }
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info("メタデータ保存完了: %s", meta_path)
+    return meta_path
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
@@ -107,11 +119,13 @@ def main():
     output_path = OUTPUT_DIR / f"{timestamp}.mp4"
 
     compose_video(script, output_path)
+    meta_path = save_metadata(script, output_path)
 
     # パスファイルに保存
     path_file = PIPELINE_DIR / "04_video_path.txt"
     path_file.write_text(str(output_path.resolve()), encoding="utf-8")
     print(f"動画生成完了: {output_path}")
+    print(f"メタデータ保存: {meta_path}")
 
 
 if __name__ == "__main__":
