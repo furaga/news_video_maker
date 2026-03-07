@@ -26,11 +26,15 @@ def generate_background_image(article_title: str, output_path: Path) -> Path | N
         return None
 
     prompt = (
-        f"Abstract futuristic technology background, {article_title}, "
+        f"Cinematic technology background, {article_title}, "
         "dark blue and cyan neon glow, bokeh, cinematic lighting, "
-        "no text, no people, vertical portrait"
+        "high detail, 8k, ultra realistic, vertical portrait"
     )
-    negative_prompt = "text, watermark, logo, people, face, body parts, ugly, blurry"
+    negative_prompt = (
+        "text, watermark, logo, signature, people, face, body parts, "
+        "ugly, blurry, low quality, distorted, deformed, artifacts, "
+        "cartoon, anime, painting, sketch"
+    )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
@@ -61,8 +65,8 @@ def generate_background_image(article_title: str, output_path: Path) -> Path | N
             negative_prompt=negative_prompt,
             height=1024,
             width=576,
-            num_inference_steps=30,
-            guidance_scale=7.5,
+            num_inference_steps=40,
+            guidance_scale=12.0,
         ).images[0]
 
         image = image.resize(OUTPUT_SIZE, Image.LANCZOS)
