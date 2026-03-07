@@ -9,7 +9,7 @@ from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_animated_clip
+from news_video_maker.video.visuals import generate_animated_clip, get_card_info
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +59,17 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     # hookセクション用の表示タイトル（YouTubeタイトルからハッシュタグを除去）
     display_title = script.title.split("#")[0].strip() if script.title else ""
 
+    # 全セクションのカード情報を事前に構築
+    all_cards = []
+    for s in script.sections:
+        card = get_card_info(s.type, s.subtitle_text)
+        if s.type == "hook":
+            card["display_title"] = display_title
+        all_cards.append(card)
+
+    total = len(script.sections)
+    prev_top: float | None = None
+
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
 
@@ -69,14 +80,16 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         # アニメーションクリップ生成
         audio = AudioFileClip(str(wav_path))
         duration = audio.duration
-        video_clip = generate_animated_clip(
-            section.subtitle_text,
-            source_name,
-            script.source_url,
-            duration,
+        is_last = (i == total - 1)
+        video_clip, prev_top = generate_animated_clip(
+            all_cards=all_cards,
+            active_idx=i,
+            source=source_name,
+            source_url=script.source_url,
+            duration=duration,
             image_url=script.image_url or None,
-            section_type=section.type,
-            display_title=display_title if section.type == "hook" else "",
+            has_outro=is_last,
+            prev_top=prev_top,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
