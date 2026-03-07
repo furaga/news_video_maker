@@ -25,6 +25,7 @@ def synthesize(text: str, output_path: Path, speaker_id: int = VOICEVOX_SPEAKER_
             )
             r.raise_for_status()
             query = r.json()
+            query["speedScale"] = 1.2  # 読み上げ速度を20%上げる
 
             # 音声合成
             r2 = httpx.post(
