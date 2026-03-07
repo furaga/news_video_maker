@@ -9,7 +9,9 @@ from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_animated_clip
+from news_video_maker.video.visuals import generate_animated_clip, generate_background_clip
+
+GAP_DURATION = 0.5  # セクション間の背景のみ表示時間（秒）
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,11 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
+
+        # セクション間にギャップ（背景のみ）を挿入
+        if i < len(script.sections) - 1:
+            gap = generate_background_clip(GAP_DURATION, image_url=script.image_url or None)
+            clips.append(gap)
 
     # 全セクションを結合
     final = concatenate_videoclips(clips)

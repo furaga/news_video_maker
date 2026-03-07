@@ -19,13 +19,13 @@ OUTRO_DURATION = 0.4   # スクロールアップ時間
 
 # セクションタイプごとの視覚スタイル定義
 _SECTION_STYLES: dict[str, dict] = {
-    "hook":   {"badge": "TODAY'S TECH", "accent": "#00dcc2", "is_title": True},
-    "main_1": {"badge": "概要",         "accent": "#00dcc2", "number": "01"},
-    "main_2": {"badge": "詳細",         "accent": "#4a8fff", "number": "02"},
-    "main_3": {"badge": "関連情報",     "accent": "#a855f7", "number": "03"},
-    "main_4": {"badge": "補足",         "accent": "#f59e0b", "number": "04"},
-    "main":   {"badge": "解説",         "accent": "#00dcc2", "number": ""},
-    "outro":  {"badge": "まとめ",       "accent": "#22c55e", "number": ""},
+    "hook":   {"accent": "#00dcc2", "is_title": True},
+    "main_1": {"accent": "#00dcc2"},
+    "main_2": {"accent": "#4a8fff"},
+    "main_3": {"accent": "#a855f7"},
+    "main_4": {"accent": "#f59e0b"},
+    "main":   {"accent": "#00dcc2"},
+    "outro":  {"accent": "#22c55e"},
 }
 
 # ---- HTML テンプレート -------------------------------------------------------
@@ -216,24 +216,6 @@ _STANDARD_CARD_TEMPLATE = """\
     from {{ opacity: 0; transform: translateY(64px); }}
     to   {{ opacity: 1; transform: translateY(0); }}
   }}
-  .card-header {{
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 28px;
-    opacity: 0; animation: fade-in {intro_ms}ms 150ms ease-out forwards;
-  }}
-  .badge {{
-    font-size: 28px; font-weight: 700;
-    color: {accent};
-    letter-spacing: 0.12em; text-transform: uppercase;
-    border: 2px solid {accent_40};
-    padding: 8px 22px; border-radius: 10px;
-    background: {accent_08};
-  }}
-  .section-number {{
-    font-size: 64px; font-weight: 700;
-    color: {accent_20};
-    letter-spacing: 0.05em; line-height: 1;
-  }}
   .divider {{
     height: 1px;
     background: linear-gradient(90deg,
@@ -279,10 +261,6 @@ _STANDARD_CARD_TEMPLATE = """\
   <div class="bg-overlay"></div>
   <div class="content">
     <div class="card">
-      <div class="card-header">
-        <div class="badge">{badge_text}</div>
-        <div class="section-number">{number_text}</div>
-      </div>
       <div class="divider"></div>
       <div class="main-text">{subtitle}</div>
     </div>
@@ -360,11 +338,7 @@ def _build_html(
             **common,
         )
     else:
-        return _STANDARD_CARD_TEMPLATE.format(
-            badge_text=html_module.escape(style.get("badge", "")),
-            number_text=html_module.escape(style.get("number", "")),
-            **common,
-        )
+        return _STANDARD_CARD_TEMPLATE.format(**common)
 
 
 async def _render_frames_async(
@@ -476,4 +450,54 @@ def generate_animated_clip(
         return all_frames[idx]
 
     logger.info("アニメーションクリップ準備完了: duration=%.1fs, frames=%d", duration, len(all_frames))
+    return VideoClip(make_frame, duration=duration)
+
+
+_BACKGROUND_ONLY_TEMPLATE = """\
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    width: {width}px; height: {height}px;
+    background: #0d1117; overflow: hidden; position: relative;
+  }}
+  .bg {{
+    position: absolute; inset: 0;
+    background-image: url('{bg_data_url}');
+    background-size: cover; background-position: center;
+    filter: blur(12px) brightness(0.22) saturate(0.8);
+    transform: scale(1.06);
+  }}
+  .bg-overlay {{
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg,
+      rgba(5, 10, 30, 0.6) 0%, transparent 40%,
+      transparent 60%, rgba(5, 10, 30, 0.8) 100%
+    );
+  }}
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="bg-overlay"></div>
+</body>
+</html>
+"""
+
+
+def generate_background_clip(duration: float, image_url: str | None = None) -> VideoClip:
+    """背景画像のみ（カードなし）の静止クリップを返す。セクション間のギャップ用。"""
+    bg_data_url = _image_to_data_url(image_url) if image_url else ""
+    html = _BACKGROUND_ONLY_TEMPLATE.format(
+        width=WIDTH, height=HEIGHT, bg_data_url=bg_data_url
+    )
+    frames = _render_frames(html, [0.0], outro_start=999, outro_duration=OUTRO_DURATION)
+    frame = frames[0]
+
+    def make_frame(_t: float) -> np.ndarray:
+        return frame
+
     return VideoClip(make_frame, duration=duration)
