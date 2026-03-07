@@ -45,7 +45,7 @@ _SUBTITLE_TEMPLATE = """\
   /* タイトルバー（上部フルwidth） */
   .title-bar {{
     position: absolute;
-    top: 0; left: 0; right: 0;
+    top: 160px; left: 0; right: 0;
     z-index: 20;
     background: rgba(0, 0, 0, 0.90);
     padding: 40px 50px 36px;
@@ -61,7 +61,7 @@ _SUBTITLE_TEMPLATE = """\
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
   .subtitle-area {{
     position: absolute;
-    bottom: 500px; left: 50px; right: 50px;
+    bottom: 500px; left: 50px; right: 140px;
     z-index: 20;
     text-align: left;
   }}
@@ -79,6 +79,16 @@ _SUBTITLE_TEMPLATE = """\
   .subtitle-line .kw {{
     background: #FFE000;
     color: #111111;
+  }}
+  .subtitle-line ruby {{
+    ruby-position: over;
+  }}
+  .subtitle-line rt {{
+    font-size: 24px;
+    font-weight: 700;
+    color: #666666;
+    background: #ffffff;
+    padding: 0 4px;
   }}
 </style>
 </head>
@@ -168,25 +178,59 @@ SOURCE_COLORS: dict[str, str] = {
 }
 
 
-def _chunk_to_html(chunk: str) -> str:
-    """**keyword** マークアップを HTML span (.kw) に変換する"""
+def _chunk_to_html(chunk: str, annotations: dict[str, str] | None = None) -> str:
+    """**keyword** マークアップを HTML span (.kw) に変換する。
+
+    annotations が指定されている場合、キーワードに ruby 注釈を付ける。
+    """
     result = ""
     last = 0
     for m in re.finditer(r'\*\*(.+?)\*\*', chunk):
         result += html_module.escape(chunk[last:m.start()])
-        result += f'<span class="kw">{html_module.escape(m.group(1))}</span>'
+        kw = m.group(1)
+        kw_escaped = html_module.escape(kw)
+        if annotations and kw in annotations:
+            rt_text = html_module.escape(annotations[kw])
+            result += f'<ruby class="kw"><span class="kw">{kw_escaped}</span><rt>{rt_text}</rt></ruby>'
+        else:
+            result += f'<span class="kw">{kw_escaped}</span>'
         last = m.end()
     result += html_module.escape(chunk[last:])
     return result
 
 
-def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
-    """narration_text を字幕チャンクのリストに分割する。
+def _split_chunks_ginza(text: str, max_chars: int = 26) -> list[str]:
+    """ginza（spaCy日本語モデル）でトークン化し、トークン単位でチャンク分割する。"""
+    import spacy
+    nlp = spacy.load("ja_ginza")
+    doc = nlp(text.strip())
 
-    句読点（。！？）で区切り、1チャンクが max_chars 文字を超える場合は
-    読点（、）でさらに分割する。それでも長い場合はて/で形の文節境界で追加分割。
-    """
-    # 句点・感嘆符・疑問符で分割（区切り文字を含む形で保持）
+    chunks: list[str] = []
+    current = ""
+
+    for token in doc:
+        token_text = token.text
+        is_punct = token_text in "。！？、"
+
+        if len(current) + len(token_text) > max_chars and current:
+            chunks.append(current)
+            current = token_text
+        else:
+            current += token_text
+
+        # 句読点で区切る（自然な区切り点）
+        if is_punct and current:
+            chunks.append(current)
+            current = ""
+
+    if current:
+        chunks.append(current)
+
+    return chunks if chunks else [text]
+
+
+def _split_chunks_fallback(text: str, max_chars: int = 26) -> list[str]:
+    """フォールバック: 正規表現ベースの分割ロジック。"""
     raw = re.split(r'(?<=[。！？])', text.strip())
     raw = [s.strip() for s in raw if s.strip()]
 
@@ -195,7 +239,6 @@ def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
         if len(sentence) <= max_chars:
             chunks.append(sentence)
             continue
-        # 読点で分割
         parts = re.split(r'(?<=、)', sentence)
         current = ""
         for part in parts:
@@ -204,7 +247,6 @@ def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
             else:
                 if current:
                     chunks.append(current)
-                # て/で形の文節境界でさらに分割試行
                 sub_parts = re.split(r'(?<=[てで])(?=[^\s、。！？])', part)
                 sub_current = ""
                 for sp in sub_parts:
@@ -213,7 +255,6 @@ def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
                     else:
                         if sub_current:
                             chunks.append(sub_current)
-                        # 強制分割（最終手段）
                         while len(sp) > max_chars:
                             chunks.append(sp[:max_chars])
                             sp = sp[max_chars:]
@@ -226,6 +267,19 @@ def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
             chunks.append(current)
 
     return chunks if chunks else [text]
+
+
+def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
+    """narration_text を字幕チャンクのリストに分割する（形態素解析ベース）。
+
+    ginza でトークン化し、トークン単位で積み上げてチャンク分割する。
+    句読点（。！？、）は自然な区切り点として優先的に使用。
+    """
+    try:
+        return _split_chunks_ginza(text, max_chars)
+    except Exception:
+        logger.warning("ginza が利用できません。フォールバックの分割を使用します。")
+        return _split_chunks_fallback(text, max_chars)
 
 
 def image_to_data_url(image_url: str) -> str | None:
@@ -301,6 +355,7 @@ async def _render_frames_async(
     section_start: float,
     total_duration: float,
     is_cta: bool = False,
+    annotations: dict[str, str] | None = None,
 ) -> list[np.ndarray]:
     """Playwright でフレームをレンダリングする。
 
@@ -324,7 +379,7 @@ async def _render_frames_async(
         for chunk_idx, (chunk, chunk_dur) in enumerate(zip(subtitle_chunks, chunk_durations)):
             # 字幕テキストを更新（CTAテンプレートは subtitle 要素なし）
             if not is_cta:
-                chunk_html = _chunk_to_html(chunk)
+                chunk_html = _chunk_to_html(chunk, annotations)
                 await page.evaluate(
                     "([html]) => { document.getElementById('subtitle').innerHTML = html; }",
                     [chunk_html],
@@ -368,10 +423,11 @@ def _render_frames(
     section_start: float = 0.0,
     total_duration: float = 60.0,
     is_cta: bool = False,
+    annotations: dict[str, str] | None = None,
 ) -> list[np.ndarray]:
     """同期ラッパー"""
     return asyncio.run(_render_frames_async(
-        html, subtitle_chunks, chunk_durations, section_start, total_duration, is_cta
+        html, subtitle_chunks, chunk_durations, section_start, total_duration, is_cta, annotations
     ))
 
 
@@ -385,22 +441,24 @@ def generate_subtitle_clip(
     duration: float,
     section_start: float = 0.0,
     total_duration: float = 60.0,
+    annotations: dict[str, str] | None = None,
 ) -> VideoClip:
     """字幕スタイルの VideoClip を返す。
 
     subtitle_chunks: 表示する字幕テキストのリスト（**keyword** マークアップ対応）
     chunk_durations: 各チャンクの表示時間（秒）
+    annotations: キーワードの注釈辞書（ruby テキストとして表示）
     """
     html = _SUBTITLE_TEMPLATE.format(
         width=WIDTH,
         height=HEIGHT,
         bg_data_url=bg_data_url or "",
         title=html_module.escape(title),
-        subtitle_html=_chunk_to_html(subtitle_chunks[0] if subtitle_chunks else ""),
+        subtitle_html=_chunk_to_html(subtitle_chunks[0] if subtitle_chunks else "", annotations),
     )
 
     logger.info("字幕クリップレンダリング開始: %d チャンク, %.1fs", len(subtitle_chunks), duration)
-    rendered = _render_frames(html, subtitle_chunks, chunk_durations, section_start, total_duration)
+    rendered = _render_frames(html, subtitle_chunks, chunk_durations, section_start, total_duration, annotations=annotations)
 
     def make_frame(t: float) -> np.ndarray:
         idx = min(int(t * FPS), len(rendered) - 1)

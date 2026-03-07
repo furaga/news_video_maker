@@ -26,7 +26,7 @@
    - 60秒超 → 各 `main_*` セクションを短縮して再生成（1回まで）
    - 25秒未満 → 各 `main_*` セクションに情報を補足して再生成（1回まで）
 
-4. Write ツールで `.cache/pipeline/03_script.json` に以下のスキーマで保存（**すべてのフィールドは必須。特に `image_url`、`bg_prompt`、`display_text` を忘れないこと**）:
+4. Write ツールで `.cache/pipeline/03_script.json` に以下のスキーマで保存（**すべてのフィールドは必須。特に `image_url`、`bg_prompt`、`display_text`、`annotations` を忘れないこと**）:
 
 ```json
 {
@@ -41,6 +41,7 @@
       "display_text": "画面字幕表示用（原語表記 + **キーワード** マークアップ）",
       "subtitle_text": "要点のみ（25文字以内）",
       "bg_prompt": "具体的な物体・場所を英語で記述したSD用プロンプト（下記ガイドライン参照）",
+      "annotations": {},
       "estimated_duration_sec": 5.0
     },
     {
@@ -49,6 +50,7 @@
       "display_text": "...",
       "subtitle_text": "...",
       "bg_prompt": "...",
+      "annotations": {"DJI": "中国ドローンメーカー"},
       "estimated_duration_sec": 9.0
     },
     {
@@ -57,6 +59,7 @@
       "display_text": "...",
       "subtitle_text": "...",
       "bg_prompt": "...",
+      "annotations": {},
       "estimated_duration_sec": 9.0
     },
     {
@@ -65,6 +68,7 @@
       "display_text": "...",
       "subtitle_text": "...",
       "bg_prompt": "...",
+      "annotations": {},
       "estimated_duration_sec": 9.0
     },
     {
@@ -73,11 +77,23 @@
       "display_text": "...",
       "subtitle_text": "...",
       "bg_prompt": "...",
+      "annotations": {},
       "estimated_duration_sec": 5.0
     }
   ]
 }
 ```
+
+### annotations ガイドライン
+
+各セクションの `annotations` に、字幕中の専門用語・略称・固有名詞の簡潔な説明を記述する。
+
+**ルール:**
+- キーは `display_text` 内の `**keyword**` マークアップで囲まれた用語と一致させる
+- 値は日本語で簡潔な説明（10文字以内目安）
+- 略称の正式名称や、一般視聴者が知らない可能性がある専門用語のみ対象
+- 一般的に知られている用語（PlayStation、Google、YouTube など）や一般的な日本語には不要
+- 同じ用語が複数セクションに出る場合、初出セクションのみに付ける（2回目以降は空の `{}` でよい）
 
 ### bg_prompt ガイドライン
 
