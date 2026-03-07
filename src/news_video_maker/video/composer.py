@@ -9,9 +9,7 @@ from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_animated_clip, generate_background_clip
-
-GAP_DURATION = 0.5  # セクション間の背景のみ表示時間（秒）
+from news_video_maker.video.visuals import generate_stack_clip, image_to_data_url
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +53,18 @@ def load_script(path: Path) -> VideoScript:
 
 def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
-    clips = []
-
     source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
-    # hookセクション用の表示タイトル（YouTubeタイトルからハッシュタグを除去）
-    display_title = script.title.split("#")[0].strip() if script.title else ""
 
+    # 背景画像を一度だけダウンロード
+    bg_data_url = image_to_data_url(script.image_url) if script.image_url else ""
+
+    # 全セクションのカードデータを事前収集
+    all_cards = [
+        {"subtitle": s.subtitle_text, "type": s.type}
+        for s in script.sections
+    ]
+
+    clips = []
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
 
@@ -68,25 +72,22 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         wav_path = AUDIO_DIR / f"{name}.wav"
         synthesize(section.narration_text, wav_path)
 
-        # アニメーションクリップ生成
+        # スタッククリップ生成
         audio = AudioFileClip(str(wav_path))
         duration = audio.duration
-        video_clip = generate_animated_clip(
-            section.subtitle_text,
-            source_name,
-            script.source_url,
-            duration,
-            image_url=script.image_url or None,
-            section_type=section.type,
-            display_title=display_title if section.type == "hook" else "",
+        prev_index = i - 1 if i > 0 else 0
+
+        video_clip = generate_stack_clip(
+            all_cards=all_cards,
+            active_index=i,
+            prev_index=prev_index,
+            source=source_name,
+            source_url=script.source_url,
+            duration=duration,
+            bg_data_url=bg_data_url or "",
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
-
-        # セクション間にギャップ（背景のみ）を挿入
-        if i < len(script.sections) - 1:
-            gap = generate_background_clip(GAP_DURATION, image_url=script.image_url or None)
-            clips.append(gap)
 
     # 全セクションを結合
     final = concatenate_videoclips(clips)
