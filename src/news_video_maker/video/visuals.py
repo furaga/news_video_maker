@@ -1,11 +1,11 @@
-"""Playwright + HTML/CSS によるアニメーションフレーム生成"""
+"""Playwright + HTML/CSS によるアニメーションフレーム生成（字幕スタイル）"""
 import asyncio
 import base64
 import html as html_module
 import io
 import logging
+import re
 
-import httpx
 import numpy as np
 from PIL import Image
 from moviepy import VideoClip
@@ -14,43 +14,11 @@ logger = logging.getLogger(__name__)
 
 WIDTH, HEIGHT = 1080, 1920
 FPS = 30
-INTRO_DURATION = 0.6   # スクロールアニメーション時間
-
-# スタックレイアウトの定数
-CARD_HEIGHT = 280    # 固定カード高（px）
-CARD_GAP = 60        # カード間隔（px）
-CARD_STEP = CARD_HEIGHT + CARD_GAP  # 340px
-
-# 上ゾーン（記事プレビュー）の定数
-SCREENSHOT_HEIGHT = 550   # 記事プレビューゾーンの高さ（px）
-CARD_TOP_PADDING = 40     # 記事プレビューとカードの間隔（px）
-# translateY は #stack の top 位置からの相対: stackCenter = CARD_TOP_PADDING + CARD_HEIGHT // 2
-STACK_CENTER = CARD_TOP_PADDING + CARD_HEIGHT // 2  # = 180
-
-# ソース別ブランドカラー
-SOURCE_COLORS: dict[str, str] = {
-    "techcrunch": "#1a7f37",
-    "arstechnica": "#dd3333",
-    "theverge": "#fa4718",
-    "hackernews": "#ff6600",
-}
-
-# セクションタイプごとのアクセントカラー定義
-_SECTION_STYLES: dict[str, dict] = {
-    "hook":   {"accent": "#00dcc2"},
-    "main_1": {"accent": "#00dcc2"},
-    "main_2": {"accent": "#4a8fff"},
-    "main_3": {"accent": "#a855f7"},
-    "main_4": {"accent": "#f59e0b"},
-    "main_5": {"accent": "#f59e0b"},
-    "main_6": {"accent": "#22c55e"},
-    "main":   {"accent": "#00dcc2"},
-    "outro":  {"accent": "#22c55e"},
-}
+FADE_DURATION = 0.3   # セクション開始時のフェードイン時間
 
 # ---- HTML テンプレート -------------------------------------------------------
 
-_STACK_TEMPLATE = """\
+_SUBTITLE_TEMPLATE = """\
 <!DOCTYPE html>
 <html>
 <head>
@@ -67,82 +35,163 @@ _STACK_TEMPLATE = """\
     position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
-    filter: blur(12px) brightness(0.22) saturate(0.8);
     transform: scale(1.06);
   }}
   .bg-overlay {{
     position: absolute; inset: 0;
-    background: linear-gradient(180deg,
-      rgba(5, 10, 30, 0.75) 0%, rgba(5, 10, 30, 0.3) 30%,
-      rgba(5, 10, 30, 0.3) 70%, rgba(5, 10, 30, 0.8) 100%
-    );
+    background: rgba(0, 0, 0, 0.25);
   }}
-  /* 記事プレビューゾーン: 記事ページのスクリーンショットを全幅表示 */
-  .article-preview {{
+  /* タイトルバー（上部固定） */
+  .title-bar {{
     position: absolute;
-    top: 0; left: 0; right: 0;
-    height: {screenshot_height}px;
-    z-index: 10;
-    overflow: hidden;
+    top: 60px; left: 60px; right: 60px;
+    z-index: 20;
   }}
-  .article-img-panel {{
-    width: 100%; height: 100%;
-    background-image: url('{bg_data_url}');
-    background-size: 100% 100%;
+  .title-bg {{
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.65);
+    border-radius: 16px;
+    padding: 20px 32px;
+    backdrop-filter: blur(8px);
+    max-width: 100%;
   }}
-  #stack {{
+  .title-text {{
+    font-size: 44px; font-weight: 900;
+    color: #ffffff;
+    line-height: 1.4;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    word-break: break-all;
+  }}
+  /* ソースラベル */
+  .source-label {{
     position: absolute;
-    left: 70px; right: 70px;
-    top: {screenshot_height}px;
+    top: 230px; left: 60px;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center; gap: 10px;
   }}
-  .card {{
-    height: {card_height}px;
-    width: 100%;
-    background: rgba(12, 22, 45, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-left-width: 4px;
-    border-left-style: solid;
-    border-radius: 36px;
-    margin-bottom: {card_gap}px;
-    padding: 0 60px;
-    display: flex; align-items: center;
-    opacity: 0.35;
+  .source-dot {{
+    width: 8px; height: 8px; border-radius: 50%;
+    background: {source_color};
+    flex-shrink: 0;
   }}
-  .card-text {{
-    font-size: 60px; font-weight: 700;
-    color: #f0f4ff;
-    line-height: 1.4; letter-spacing: 0.01em;
+  .source-text {{
+    font-size: 28px; font-weight: 700;
+    color: rgba(255,255,255,0.7);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
   }}
-  .bottom-bar {{
-    position: absolute; bottom: 56px; left: 60px; right: 60px;
-    background: rgba(10, 18, 38, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 20px; padding: 22px 32px;
-    display: flex; align-items: center; gap: 18px;
-    backdrop-filter: blur(16px);
+  /* 字幕ボックス（下部中央） */
+  .subtitle-area {{
+    position: absolute;
+    bottom: 100px; left: 60px; right: 60px;
+    z-index: 20;
+    display: flex; justify-content: center;
   }}
-  .bottom-dot {{ width: 7px; height: 7px; min-width: 7px; border-radius: 50%; background: #00dcc2; }}
-  .bottom-source {{ font-size: 26px; font-weight: 700; color: #a0b8d8; white-space: nowrap; }}
-  .bottom-url {{ font-size: 22px; color: #4a6888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+  .subtitle-bg {{
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.72);
+    border-radius: 16px;
+    padding: 24px 40px;
+    backdrop-filter: blur(4px);
+    max-width: 100%;
+  }}
+  .subtitle-text {{
+    font-size: 56px; font-weight: 700;
+    color: #ffffff;
+    line-height: 1.5;
+    text-align: center;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+    word-break: break-all;
+  }}
   #fade {{
     position: absolute; inset: 0; z-index: 100;
-    background: #000; opacity: 0; pointer-events: none;
+    background: #000; opacity: 1; pointer-events: none;
   }}
 </style>
 </head>
 <body>
-  <div class="bg"></div>
+  <div class="bg" id="bg"></div>
   <div class="bg-overlay"></div>
-  <div class="article-preview">
-    <div class="article-img-panel"></div>
+  <div class="title-bar">
+    <div class="title-bg">
+      <div class="title-text">{title}</div>
+    </div>
   </div>
-  <div id="stack">
-{cards_html}
+  <div class="source-label">
+    <div class="source-dot"></div>
+    <span class="source-text">{source}</span>
   </div>
-  <div class="bottom-bar">
-    <div class="bottom-dot"></div>
-    <span class="bottom-source">{source}</span>
-    <span class="bottom-url">{source_url}</span>
+  <div class="subtitle-area">
+    <div class="subtitle-bg">
+      <div class="subtitle-text" id="subtitle">{subtitle}</div>
+    </div>
+  </div>
+  <div id="fade"></div>
+</body>
+</html>
+"""
+
+_CTA_TEMPLATE = """\
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    width: {width}px; height: {height}px;
+    background: #0d1117;
+    font-family: 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
+    overflow: hidden; position: relative;
+  }}
+  .bg {{
+    position: absolute; inset: 0;
+    background-image: url('{bg_data_url}');
+    background-size: cover; background-position: center;
+    transform: scale(1.06);
+  }}
+  .bg-overlay {{
+    position: absolute; inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }}
+  .cta-center {{
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 20;
+  }}
+  .cta-bg {{
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.78);
+    border-radius: 28px;
+    padding: 60px 80px;
+    backdrop-filter: blur(8px);
+    text-align: center;
+  }}
+  .cta-emoji {{
+    font-size: 120px; line-height: 1; margin-bottom: 32px;
+  }}
+  .cta-text {{
+    font-size: 68px; font-weight: 900;
+    color: #ffffff;
+    line-height: 1.6;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    white-space: pre-line;
+  }}
+  #fade {{
+    position: absolute; inset: 0; z-index: 100;
+    background: #000; opacity: 1; pointer-events: none;
+  }}
+</style>
+</head>
+<body>
+  <div class="bg" id="bg"></div>
+  <div class="bg-overlay"></div>
+  <div class="cta-center">
+    <div class="cta-bg">
+      <div class="cta-emoji">👍</div>
+      <div class="cta-text">{cta_text}</div>
+    </div>
   </div>
   <div id="fade"></div>
 </body>
@@ -151,8 +200,53 @@ _STACK_TEMPLATE = """\
 
 # ---- ヘルパー ----------------------------------------------------------------
 
+# ソース別ブランドカラー
+SOURCE_COLORS: dict[str, str] = {
+    "techcrunch": "#1a7f37",
+    "arstechnica": "#dd3333",
+    "theverge": "#fa4718",
+    "hackernews": "#ff6600",
+}
+
+
+def split_into_subtitle_chunks(text: str, max_chars: int = 22) -> list[str]:
+    """narration_text を字幕チャンクのリストに分割する。
+
+    句読点（。！？）で区切り、1チャンクが max_chars 文字を超える場合は
+    読点（、）でさらに分割する。
+    """
+    # 句点・感嘆符・疑問符で分割（区切り文字を含む形で保持）
+    raw = re.split(r'(?<=[。！？])', text.strip())
+    raw = [s.strip() for s in raw if s.strip()]
+
+    chunks = []
+    for sentence in raw:
+        if len(sentence) <= max_chars:
+            chunks.append(sentence)
+        else:
+            # 読点で分割
+            parts = re.split(r'(?<=、)', sentence)
+            current = ""
+            for part in parts:
+                if len(current) + len(part) <= max_chars:
+                    current += part
+                else:
+                    if current:
+                        chunks.append(current)
+                    # part 自体が長い場合はさらに強制分割
+                    while len(part) > max_chars:
+                        chunks.append(part[:max_chars])
+                        part = part[max_chars:]
+                    current = part
+            if current:
+                chunks.append(current)
+
+    return chunks if chunks else [text]
+
+
 def image_to_data_url(image_url: str) -> str | None:
     """記事画像をダウンロードして base64 data URL に変換する"""
+    import httpx
     try:
         r = httpx.get(
             image_url,
@@ -169,78 +263,12 @@ def image_to_data_url(image_url: str) -> str | None:
         return None
 
 
-_SCREENSHOT_VIEWPORT_W = 1200
-_SCREENSHOT_VIEWPORT_H = _SCREENSHOT_VIEWPORT_W * 2  # 2400px（横幅×2）
-
-
-_CLAUDE_PREVIEW_W = 600   # Claude に渡すプレビュー画像の幅（処理を軽くするため縮小）
-
-
-def _get_best_crop_y(orig_img: Image.Image) -> int:
-    """Claude Code (claude -p --allowedTools Read) で最適クロップY位置を返す。失敗時は 0。
-
-    orig_img: 元のフルページスクリーンショット（リサイズ前）
-    戻り値: 元画像座標でのクロップY位置
-    """
-    import os
-    import re
-    import subprocess
-    import tempfile
-
-    orig_w, orig_h = orig_img.size
-    panel_h_in_orig = int(SCREENSHOT_HEIGHT * orig_w / WIDTH)  # 元画像座標でのパネル高
-    max_y = orig_h - panel_h_in_orig
-    if max_y <= 0:
-        return 0
-
-    # Claude 用プレビュー画像を作成（幅を縮小してファイルサイズを削減）
-    preview_scale = _CLAUDE_PREVIEW_W / orig_w
-    preview_h = int(orig_h * preview_scale)
-    preview_img = orig_img.resize((_CLAUDE_PREVIEW_W, preview_h), Image.LANCZOS)
-    panel_h_in_preview = int(panel_h_in_orig * preview_scale)
-    max_y_preview = preview_h - panel_h_in_preview
-
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            preview_img.save(f, format="PNG")
-            tmp_path = f.name
-
-        prompt = (
-            f"Read the image at {tmp_path}. "
-            f"This is a news article page screenshot ({preview_h}px tall, {_CLAUDE_PREVIEW_W}px wide). "
-            f"I need a {panel_h_in_preview}px-tall crop for a short video thumbnail. "
-            f"Which Y offset (integer, 0 to {max_y_preview}) shows the most visually interesting content "
-            "(article hero image, main photo)? Skip navigation bars and headers. "
-            "Reply with ONLY a single integer."
-        )
-        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
-        result = subprocess.run(
-            ["claude", "-p", prompt, "--allowedTools", "Read"],
-            capture_output=True, text=True, timeout=120,
-            env=env,
-        )
-        numbers = re.findall(r"\d+", result.stdout)
-        if not numbers:
-            raise ValueError(f"整数が見つからない: {result.stdout!r}")
-        y_preview = int(numbers[-1])
-        y_preview = max(0, min(y_preview, max_y_preview))
-        # プレビュー座標を元画像座標に変換
-        y_orig = int(y_preview / preview_scale)
-        return max(0, min(y_orig, max_y))
-    except Exception as e:
-        logger.warning("Claude Code クロップ判定失敗、y=0 にフォールバック: %s", e)
-        return 0
-    finally:
-        if tmp_path:
-            try:
-                os.unlink(tmp_path)
-            except Exception:
-                pass
+_SCREENSHOT_VIEWPORT_W = 1080
+_SCREENSHOT_VIEWPORT_H = 1920
 
 
 async def _screenshot_article_url_async(url: str) -> str | None:
-    """Playwright でページ全体をキャプチャし、Claude Code で最適クロップして data URL を返す"""
+    """Playwright でページ全画面をキャプチャし 1080x1920 にリサイズして data URL を返す"""
     from news_video_maker.config import IMAGES_DIR
 
     try:
@@ -251,8 +279,7 @@ async def _screenshot_article_url_async(url: str) -> str | None:
                 viewport={"width": _SCREENSHOT_VIEWPORT_W, "height": _SCREENSHOT_VIEWPORT_H}
             )
             await page.goto(url, wait_until="load", timeout=30000)
-            # viewport 範囲のみキャプチャ（横幅×2高さ = 1200×2400px）
-            screenshot_bytes = await page.screenshot(type="png")
+            screenshot_bytes = await page.screenshot(type="png", full_page=False)
             await browser.close()
 
         # 元スクリーンショットを保存（デバッグ用）
@@ -261,26 +288,14 @@ async def _screenshot_article_url_async(url: str) -> str | None:
         img = Image.open(io.BytesIO(screenshot_bytes))
         logger.info("スクリーンショット取得完了: %dx%d → %s", img.width, img.height, orig_path)
 
-        # Claude Code でベストクロップY位置を判定（元画像を渡す）
-        crop_y = _get_best_crop_y(img)
-        logger.info("クロップY位置: %d (元画像座標)", crop_y)
-
-        # Pillow でリサイズ → クロップ（WIDTH x SCREENSHOT_HEIGHT に整形）
-        scale = WIDTH / img.width
-        new_h = int(img.height * scale)
-        img_resized = img.resize((WIDTH, new_h), Image.LANCZOS)
-        crop_y_scaled = int(crop_y * scale)
-        img_cropped = img_resized.crop(
-            (0, crop_y_scaled, WIDTH, crop_y_scaled + SCREENSHOT_HEIGHT)
-        )
-
-        # クロップ済み画像を保存（デバッグ用）
-        crop_path = IMAGES_DIR / "article_screenshot_crop.png"
-        img_cropped.save(crop_path)
-        logger.info("クロップ済み画像保存: %s", crop_path)
+        # 1080x1920 にリサイズ
+        img_resized = img.resize((WIDTH, HEIGHT), Image.LANCZOS)
+        save_path = IMAGES_DIR / "article_screenshot_full.png"
+        img_resized.save(save_path)
+        logger.info("リサイズ済み画像保存: %s", save_path)
 
         buf = io.BytesIO()
-        img_cropped.save(buf, format="PNG")
+        img_resized.save(buf, format="PNG")
         b64 = base64.b64encode(buf.getvalue()).decode()
         return f"data:image/png;base64,{b64}"
     except Exception as e:
@@ -293,44 +308,21 @@ def screenshot_article_url(url: str) -> str | None:
     return asyncio.run(_screenshot_article_url_async(url))
 
 
-def _build_stack_html(
-    all_cards: list[dict],
-    active_index: int,
-    prev_index: int,
-    source: str,
-    source_url: str,
-    bg_data_url: str,
-) -> str:
-    """全カードを縦積みにしたHTML文字列を組み立てる"""
-    cards_html = ""
-    for card in all_cards:
-        style = _SECTION_STYLES.get(card["type"], _SECTION_STYLES["main"])
-        accent = style["accent"]
-        subtitle = html_module.escape(card["subtitle"])
-        cards_html += f'    <div class="card" style="border-left-color: {accent};"><div class="card-text">{subtitle}</div></div>\n'
+# ---- Playwright レンダリング -------------------------------------------------
 
-    return _STACK_TEMPLATE.format(
-        width=WIDTH,
-        height=HEIGHT,
-        bg_data_url=bg_data_url or "",
-        source=html_module.escape(source),
-        source_url=html_module.escape(source_url),
-        card_height=CARD_HEIGHT,
-        card_gap=CARD_GAP,
-        cards_html=cards_html,
-        screenshot_height=SCREENSHOT_HEIGHT,
-    )
-
-
-async def _render_stack_frames_async(
+async def _render_frames_async(
     html: str,
-    times: list[float],
-    active_index: int,
-    prev_index: int,
-    section_start: float = 0.0,
-    total_duration: float = 60.0,
+    subtitle_chunks: list[str],
+    chunk_durations: list[float],
+    section_start: float,
+    total_duration: float,
+    is_cta: bool = False,
 ) -> list[np.ndarray]:
-    """Playwright でスタックフレームをレンダリングする"""
+    """Playwright でフレームをレンダリングする。
+
+    各チャンクにつき chunk_duration 秒分のフレームを生成する。
+    セクション冒頭はフェードインアニメーション付き。
+    """
     from playwright.async_api import async_playwright
 
     frames: list[np.ndarray] = []
@@ -340,133 +332,130 @@ async def _render_stack_frames_async(
         page = await browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
         await page.set_content(html, wait_until="networkidle")
 
-        for t in times:
-            await page.evaluate(
-                """([t, prevIdx, activeIdx, introDuration, cardStep, stackCenter, cardHalfH, sectionStart, totalDuration]) => {
-                    const stack = document.getElementById('stack');
-                    const cards = stack.querySelectorAll('.card');
-                    const fade = document.getElementById('fade');
+        elapsed = 0.0
+        for chunk_idx, (chunk, chunk_dur) in enumerate(zip(subtitle_chunks, chunk_durations)):
+            # 字幕テキストを更新（CTAテンプレートは subtitle 要素なし）
+            if not is_cta:
+                escaped_chunk = chunk.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+                await page.evaluate(
+                    f"document.getElementById('subtitle').textContent = '{escaped_chunk}';"
+                )
 
-                    const prevOffset = stackCenter - (prevIdx * cardStep + cardHalfH);
-                    const currentOffset = stackCenter - (activeIdx * cardStep + cardHalfH);
+            n_frames = max(1, round(chunk_dur * FPS))
+            for frame_i in range(n_frames):
+                t_in_chunk = frame_i / FPS
+                global_t = section_start + elapsed + t_in_chunk
 
-                    let offset, progress;
-                    if (prevIdx === activeIdx) {
-                        // 最初のカード: スクロールなし、フェードイン
-                        offset = currentOffset;
-                        progress = 1;
-                        if (fade) fade.style.opacity = Math.max(0, 1 - t / introDuration);
-                    } else {
-                        if (fade) fade.style.opacity = 0;
-                        if (t < introDuration) {
-                            const raw = t / introDuration;
-                            const eased = raw * raw * (3 - 2 * raw);
-                            offset = prevOffset + (currentOffset - prevOffset) * eased;
-                            progress = eased;
-                        } else {
-                            offset = currentOffset;
-                            progress = 1;
+                await page.evaluate(
+                    """([globalT, totalDuration, tInChunk, fadeDuration, isFirst]) => {
+                        const bgEl = document.getElementById('bg');
+                        if (bgEl) {
+                            const bgScale = 1.06 + 0.08 * (globalT / totalDuration);
+                            bgEl.style.transform = 'scale(' + bgScale + ')';
                         }
-                    }
-
-                    stack.style.transform = 'translateY(' + offset + 'px)';
-
-                    // カード不透明度の補間
-                    cards.forEach((card, i) => {
-                        let opacity;
-                        if (prevIdx === activeIdx) {
-                            opacity = i === activeIdx ? 1.0 : 0.35;
-                        } else if (i === activeIdx && i === prevIdx) {
-                            opacity = 1.0;
-                        } else if (i === activeIdx) {
-                            opacity = 0.35 + 0.65 * progress;
-                        } else if (i === prevIdx) {
-                            opacity = 1.0 - 0.65 * progress;
-                        } else {
-                            opacity = 0.35;
+                        const fade = document.getElementById('fade');
+                        if (fade) {
+                            if (isFirst && tInChunk < fadeDuration) {
+                                fade.style.opacity = 1 - tInChunk / fadeDuration;
+                            } else {
+                                fade.style.opacity = 0;
+                            }
                         }
-                        card.style.opacity = opacity;
-                    });
+                    }""",
+                    [global_t, total_duration, t_in_chunk, FADE_DURATION, chunk_idx == 0],
+                )
 
-                    // Ken Burns: 背景をゆっくりズーム（全体で 1.06 → 1.14）
-                    const globalT = sectionStart + t;
-                    const bgScale = 1.06 + 0.08 * (globalT / totalDuration);
-                    const bgEl = document.querySelector('.bg');
-                    if (bgEl) bgEl.style.transform = 'scale(' + bgScale + ')';
-                }""",
-                [t, prev_index, active_index, INTRO_DURATION,
-                 CARD_STEP, STACK_CENTER, CARD_HEIGHT // 2,
-                 section_start, total_duration],
-            )
-            screenshot = await page.screenshot(type="png")
-            img = Image.open(io.BytesIO(screenshot)).convert("RGB")
-            frames.append(np.array(img))
+                screenshot = await page.screenshot(type="png")
+                img = Image.open(io.BytesIO(screenshot)).convert("RGB")
+                frames.append(np.array(img))
+
+            elapsed += chunk_dur
 
         await browser.close()
 
     return frames
 
 
-def _render_stack_frames(
+def _render_frames(
     html: str,
-    times: list[float],
-    active_index: int,
-    prev_index: int,
+    subtitle_chunks: list[str],
+    chunk_durations: list[float],
     section_start: float = 0.0,
     total_duration: float = 60.0,
+    is_cta: bool = False,
 ) -> list[np.ndarray]:
     """同期ラッパー"""
-    return asyncio.run(_render_stack_frames_async(
-        html, times, active_index, prev_index, section_start, total_duration
+    return asyncio.run(_render_frames_async(
+        html, subtitle_chunks, chunk_durations, section_start, total_duration, is_cta
     ))
 
 
 # ---- 公開 API ---------------------------------------------------------------
 
-def generate_stack_clip(
-    all_cards: list[dict],
-    active_index: int,
-    prev_index: int,
+def generate_subtitle_clip(
+    title: str,
+    subtitle_chunks: list[str],
+    chunk_durations: list[float],
+    bg_data_url: str,
     source: str,
     source_url: str,
     duration: float,
-    bg_data_url: str = "",
-    article_title: str = "",
-    source_color: str = "#1a7f37",
     section_start: float = 0.0,
     total_duration: float = 60.0,
 ) -> VideoClip:
-    """全カードを縦積みにして、active_index のカードを中央に表示する VideoClip を返す。
+    """字幕スタイルの VideoClip を返す。
 
-    all_cards: [{"subtitle": str, "type": str}] のリスト（全セクション分）
-    active_index: 現在表示するカードのインデックス
-    prev_index: ひとつ前のカードのインデックス（スクロールアニメーション用）
+    subtitle_chunks: 表示する字幕テキストのリスト（narration_text を分割したもの）
+    chunk_durations: 各チャンクの表示時間（秒）
     """
-    html = _build_stack_html(
-        all_cards, active_index, prev_index,
-        source, source_url, bg_data_url,
+    source_color = SOURCE_COLORS.get(source, "#00dcc2")
+
+    html = _SUBTITLE_TEMPLATE.format(
+        width=WIDTH,
+        height=HEIGHT,
+        bg_data_url=bg_data_url or "",
+        title=html_module.escape(title),
+        source=html_module.escape(source),
+        source_color=source_color,
+        subtitle=html_module.escape(subtitle_chunks[0] if subtitle_chunks else ""),
     )
 
-    # イントロ + ホールドの2段階レンダリング
-    intro_times = [i / FPS for i in range(int(INTRO_DURATION * FPS) + 1)]
-    hold_times = [INTRO_DURATION + 0.01]
-    all_times = intro_times + hold_times
-
-    logger.info("スタックフレームレンダリング開始: card=%d/%d, frames=%d",
-                active_index + 1, len(all_cards), len(all_times))
-    rendered = _render_stack_frames(
-        html, all_times, active_index, prev_index, section_start, total_duration
-    )
-
-    intro_frames = rendered[:len(intro_times)]
-    hold_frame = rendered[len(intro_times)]
-
-    n_hold = max(1, round((duration - INTRO_DURATION) * FPS))
-    all_frames = intro_frames + [hold_frame] * n_hold
+    logger.info("字幕クリップレンダリング開始: %d チャンク, %.1fs", len(subtitle_chunks), duration)
+    rendered = _render_frames(html, subtitle_chunks, chunk_durations, section_start, total_duration)
 
     def make_frame(t: float) -> np.ndarray:
-        idx = min(int(t * FPS), len(all_frames) - 1)
-        return all_frames[idx]
+        idx = min(int(t * FPS), len(rendered) - 1)
+        return rendered[idx]
 
-    logger.info("スタッククリップ準備完了: duration=%.1fs, frames=%d", duration, len(all_frames))
+    logger.info("字幕クリップ準備完了: duration=%.1fs, frames=%d", duration, len(rendered))
+    return VideoClip(make_frame, duration=duration)
+
+
+def generate_cta_clip(
+    bg_data_url: str,
+    duration: float,
+    section_start: float = 0.0,
+    total_duration: float = 60.0,
+) -> VideoClip:
+    """CTAセクション用 VideoClip を返す"""
+    cta_text = "高評価とチャンネル登録\\nよろしくお願いします！"
+
+    html = _CTA_TEMPLATE.format(
+        width=WIDTH,
+        height=HEIGHT,
+        bg_data_url=bg_data_url or "",
+        cta_text=html_module.escape("高評価とチャンネル登録\nよろしくお願いします！"),
+    )
+
+    chunks = ["高評価とチャンネル登録\nよろしくお願いします！"]
+    durations = [duration]
+
+    logger.info("CTAクリップレンダリング開始: %.1fs", duration)
+    rendered = _render_frames(html, chunks, durations, section_start, total_duration, is_cta=True)
+
+    def make_frame(t: float) -> np.ndarray:
+        idx = min(int(t * FPS), len(rendered) - 1)
+        return rendered[idx]
+
+    logger.info("CTAクリップ準備完了: duration=%.1fs, frames=%d", duration, len(rendered))
     return VideoClip(make_frame, duration=duration)

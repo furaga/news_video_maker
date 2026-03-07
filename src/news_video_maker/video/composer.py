@@ -8,12 +8,29 @@ from pathlib import Path
 
 from moviepy import AudioFileClip, concatenate_videoclips
 
-from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
-from news_video_maker.video.background import generate_background_image
+from news_video_maker.config import AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, PIPELINE_DIR
+from news_video_maker.video.background import generate_background_images
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_stack_clip, image_to_data_url, screenshot_article_url
+from news_video_maker.video.visuals import (
+    generate_cta_clip,
+    generate_subtitle_clip,
+    image_to_data_url,
+    screenshot_article_url,
+    split_into_subtitle_chunks,
+)
+
+
+def _calc_chunk_durations(chunks: list[str], total_duration: float) -> list[float]:
+    """文字数比で各チャンクの表示時間を配分する"""
+    total_chars = sum(len(c) for c in chunks)
+    if total_chars == 0:
+        return [total_duration / len(chunks)] * len(chunks)
+    return [total_duration * len(c) / total_chars for c in chunks]
 
 logger = logging.getLogger(__name__)
+
+# CTAナレーション
+CTA_NARRATION = "高評価とチャンネル登録、よろしくおねがいします！"
 
 
 @dataclass
@@ -53,48 +70,39 @@ def load_script(path: Path) -> VideoScript:
     )
 
 
+def _path_to_data_url(path: Path) -> str:
+    """画像ファイルを base64 data URL に変換する"""
+    ext = path.suffix.lower()
+    mime = "image/png" if ext == ".png" else "image/jpeg"
+    b64 = base64.b64encode(path.read_bytes()).decode()
+    return f"data:{mime};base64,{b64}"
+
+
 def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
     source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
 
-    # 02_selected.json から英語タイトルとブランドカラーを取得
-    source_colors = {
-        "techcrunch": "#1a7f37",
-        "arstechnica": "#dd3333",
-        "theverge": "#fa4718",
-        "hackernews": "#ff6600",
-    }
+    # 02_selected.json から英語タイトルと key_points を取得
     article_title_en = script.title
-    source_color = "#1a4a8a"
+    key_points: list[str] = []
     selected_path = PIPELINE_DIR / "02_selected.json"
     if selected_path.exists():
         selected = json.loads(selected_path.read_text(encoding="utf-8"))
         article_title_en = selected.get("title", selected.get("title_en", script.title))
-        source_color = source_colors.get(selected.get("source", ""), "#1a4a8a")
-
-    # 背景画像を一度だけ取得（記事画像 → 記事スクリーンショット → AI生成 → フォールバック）
-    bg_data_url = image_to_data_url(script.image_url) if script.image_url else ""
-    if not bg_data_url:
-        logger.info("記事URLからスクリーンショットを取得: %s", script.source_url)
-        bg_data_url = screenshot_article_url(script.source_url) or ""
-    if not bg_data_url:
-        bg_path = generate_background_image(
-            article_title_en,
-            PIPELINE_DIR.parent / "images" / "bg_generated.png",
-        )
-        if bg_path:
-            bg_data_url = f"data:image/png;base64,{base64.b64encode(bg_path.read_bytes()).decode()}"
-
-    # 全セクションのカードデータを事前収集
-    all_cards = [
-        {"subtitle": s.subtitle_text, "type": s.type}
-        for s in script.sections
-    ]
+        key_points = selected.get("ja_key_points", [])
 
     # 全セクションの音声を先に合成して total_duration を確定
+    # (スクリプトのセクション + CTAセクション)
+    all_sections = list(script.sections)
+    cta_wav_path = AUDIO_DIR / f"{len(all_sections):02d}_cta.wav"
+    synthesize(CTA_NARRATION, cta_wav_path)
+    cta_audio = AudioFileClip(str(cta_wav_path))
+    cta_duration = cta_audio.duration
+    cta_audio.close()
+
     wav_paths = []
     durations = []
-    for i, section in enumerate(script.sections):
+    for i, section in enumerate(all_sections):
         name = f"{i:02d}_{section.type}"
         wav_path = AUDIO_DIR / f"{name}.wav"
         synthesize(section.narration_text, wav_path)
@@ -103,34 +111,86 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         durations.append(audio.duration)
         audio.close()
 
-    total_duration = sum(durations)
+    total_duration = sum(durations) + cta_duration
 
+    # 背景画像を複数生成（セクション数に基づいて枚数決定）
+    # hookセクションは記事スクリーンショットを使うため、AI生成は残りセクション分
+    num_ai_images = max(1, len(all_sections))  # セクションごとに1枚
+
+    # hookセクション用: 記事スクリーンショット（全画面）
+    hook_bg_data_url = ""
+    if script.image_url:
+        hook_bg_data_url = image_to_data_url(script.image_url) or ""
+    if not hook_bg_data_url:
+        logger.info("hookセクション用: 記事URLからスクリーンショットを取得: %s", script.source_url)
+        hook_bg_data_url = screenshot_article_url(script.source_url) or ""
+
+    # AI生成背景画像（全セクション共通のフォールバック兼、hookセクション以外用）
+    bg_list: list[str] = []
+    ai_bg_results = generate_background_images(
+        article_title_en,
+        key_points,
+        num_ai_images,
+        IMAGES_DIR,
+    )
+    for bg_path, _ in ai_bg_results:
+        bg_list.append(_path_to_data_url(bg_path))
+
+    # AI生成に失敗した場合、hookスクリーンショットを全セクションで使い回す
+    if not bg_list:
+        fallback = hook_bg_data_url or ""
+        bg_list = [fallback] * num_ai_images
+
+    # hookセクションのbg: スクリーンショット優先、なければAI生成の最初の1枚
+    if not hook_bg_data_url and bg_list:
+        hook_bg_data_url = bg_list[0]
+
+    # クリップ生成
     clips = []
     section_start = 0.0
-    for i, section in enumerate(script.sections):
-        name = f"{i:02d}_{section.type}"
+
+    for i, section in enumerate(all_sections):
         wav_path = wav_paths[i]
         duration = durations[i]
-        prev_index = i - 1 if i > 0 else 0
 
-        # スタッククリップ生成
+        # セクションに対応する背景画像を選択
+        if section.type == "hook" and hook_bg_data_url:
+            bg_data_url = hook_bg_data_url
+        else:
+            bg_idx = i % len(bg_list)
+            bg_data_url = bg_list[bg_idx]
+
+        # narration_text を字幕チャンクに分割して時間配分
+        chunks = split_into_subtitle_chunks(section.narration_text)
+        chunk_durs = _calc_chunk_durations(chunks, duration)
+
         audio = AudioFileClip(str(wav_path))
-        video_clip = generate_stack_clip(
-            all_cards=all_cards,
-            active_index=i,
-            prev_index=prev_index,
+        video_clip = generate_subtitle_clip(
+            title=script.title,
+            subtitle_chunks=chunks,
+            chunk_durations=chunk_durs,
+            bg_data_url=bg_data_url,
             source=source_name,
             source_url=script.source_url,
             duration=duration,
-            bg_data_url=bg_data_url or "",
-            article_title=article_title_en,
-            source_color=source_color,
             section_start=section_start,
             total_duration=total_duration,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
         section_start += duration
+
+    # CTAセクション
+    cta_bg = bg_list[-1] if bg_list else hook_bg_data_url or ""
+    cta_audio = AudioFileClip(str(cta_wav_path))
+    cta_video = generate_cta_clip(
+        bg_data_url=cta_bg,
+        duration=cta_duration,
+        section_start=section_start,
+        total_duration=total_duration,
+    )
+    cta_video = cta_video.with_audio(cta_audio)
+    clips.append(cta_video)
 
     # 全セクションを結合
     final = concatenate_videoclips(clips)
