@@ -86,6 +86,7 @@ class ScriptSection:
     estimated_duration_sec: float
     bg_prompt: str = field(default="")
     display_text: str = field(default="")  # 字幕表示用（**keyword** マークアップ、原語表記）
+    annotations: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -107,6 +108,7 @@ def load_script(path: Path) -> VideoScript:
             estimated_duration_sec=s["estimated_duration_sec"],
             bg_prompt=s.get("bg_prompt", ""),
             display_text=s.get("display_text", ""),
+            annotations=s.get("annotations", {}),
         )
         for s in data["sections"]
     ]
@@ -230,6 +232,7 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             duration=duration,
             section_start=section_start,
             total_duration=total_duration,
+            annotations=section.annotations or None,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
