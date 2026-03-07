@@ -9,7 +9,7 @@ from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, OUTPUT_DIR, PIPELINE_DIR
 from news_video_maker.video.tts import synthesize
-from news_video_maker.video.visuals import generate_animated_clip, get_card_info
+from news_video_maker.video.visuals import generate_stack_clip, image_to_data_url
 
 logger = logging.getLogger(__name__)
 
@@ -53,23 +53,18 @@ def load_script(path: Path) -> VideoScript:
 
 def compose_video(script: VideoScript, output_path: Path) -> Path:
     """台本から動画を生成してMP4に保存する"""
-    clips = []
-
     source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
-    # hookセクション用の表示タイトル（YouTubeタイトルからハッシュタグを除去）
-    display_title = script.title.split("#")[0].strip() if script.title else ""
 
-    # 全セクションのカード情報を事前に構築
-    all_cards = []
-    for s in script.sections:
-        card = get_card_info(s.type, s.subtitle_text)
-        if s.type == "hook":
-            card["display_title"] = display_title
-        all_cards.append(card)
+    # 背景画像を一度だけダウンロード
+    bg_data_url = image_to_data_url(script.image_url) if script.image_url else ""
 
-    total = len(script.sections)
-    prev_top: float | None = None
+    # 全セクションのカードデータを事前収集
+    all_cards = [
+        {"subtitle": s.subtitle_text, "type": s.type}
+        for s in script.sections
+    ]
 
+    clips = []
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
 
@@ -77,19 +72,19 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         wav_path = AUDIO_DIR / f"{name}.wav"
         synthesize(section.narration_text, wav_path)
 
-        # アニメーションクリップ生成
+        # スタッククリップ生成
         audio = AudioFileClip(str(wav_path))
         duration = audio.duration
-        is_last = (i == total - 1)
-        video_clip, prev_top = generate_animated_clip(
+        prev_index = i - 1 if i > 0 else 0
+
+        video_clip = generate_stack_clip(
             all_cards=all_cards,
-            active_idx=i,
+            active_index=i,
+            prev_index=prev_index,
             source=source_name,
             source_url=script.source_url,
             duration=duration,
-            image_url=script.image_url or None,
-            has_outro=is_last,
-            prev_top=prev_top,
+            bg_data_url=bg_data_url or "",
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
