@@ -1,7 +1,9 @@
 """Pillow テキストカード生成"""
+import io
 import logging
 from pathlib import Path
 
+import httpx
 from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
@@ -28,22 +30,70 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def generate_text_card(subtitle_text: str, source: str, output_path: Path) -> Path:
-    """テキストカード画像を生成してPNGに保存する"""
+def _make_gradient_background() -> Image.Image:
+    """グラデーション背景（紺色 → 深青）を生成"""
     img = Image.new("RGB", (WIDTH, HEIGHT))
     draw = ImageDraw.Draw(img)
-
-    # グラデーション背景（紺色 → 深青）
     for y in range(HEIGHT):
         ratio = y / HEIGHT
         r = int(10 + ratio * 5)
         g = int(20 + ratio * 30)
         b = int(60 + ratio * 80)
         draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
+    return img
+
+
+def _download_and_crop_image(image_url: str) -> Image.Image | None:
+    """記事画像をダウンロードして1080×1920にcoverクロップする"""
+    try:
+        r = httpx.get(
+            image_url,
+            headers={"User-Agent": "news-video-maker/0.1"},
+            timeout=10,
+            follow_redirects=True,
+        )
+        r.raise_for_status()
+        img = Image.open(io.BytesIO(r.content)).convert("RGB")
+
+        # Cover crop: 短辺を基準にリサイズしてから中央クロップ
+        scale = max(WIDTH / img.width, HEIGHT / img.height)
+        new_w = int(img.width * scale)
+        new_h = int(img.height * scale)
+        img = img.resize((new_w, new_h), Image.LANCZOS)
+
+        left = (new_w - WIDTH) // 2
+        top = (new_h - HEIGHT) // 2
+        img = img.crop((left, top, left + WIDTH, top + HEIGHT))
+
+        # 半透明の黒オーバーレイ（テキスト可読性確保）
+        overlay = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 140))
+        img = img.convert("RGBA")
+        img = Image.alpha_composite(img, overlay)
+        return img.convert("RGB")
+
+    except Exception as e:
+        logger.warning("記事画像の取得に失敗しました: %s", e)
+        return None
+
+
+def generate_text_card(
+    subtitle_text: str,
+    source: str,
+    output_path: Path,
+    image_url: str | None = None,
+) -> Path:
+    """テキストカード画像を生成してPNGに保存する"""
+    # 背景: 記事画像があれば使用、なければグラデーション
+    img = None
+    if image_url:
+        img = _download_and_crop_image(image_url)
+    if img is None:
+        img = _make_gradient_background()
+
+    draw = ImageDraw.Draw(img)
 
     # メインテキスト
     font = _load_font(FONT_SIZE)
-    # テキストを折り返して複数行にする
     lines = _wrap_text(subtitle_text, font, draw, max_width=WIDTH - 80)
     line_height = FONT_SIZE + 16
     total_text_height = len(lines) * line_height

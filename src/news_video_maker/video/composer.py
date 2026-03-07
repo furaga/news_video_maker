@@ -29,6 +29,7 @@ class VideoScript:
     source_url: str
     total_duration_sec: float
     sections: list[ScriptSection]
+    image_url: str = ""
 
 
 def load_script(path: Path) -> VideoScript:
@@ -47,6 +48,7 @@ def load_script(path: Path) -> VideoScript:
         source_url=data["source_url"],
         total_duration_sec=data["total_duration_sec"],
         sections=sections,
+        image_url=data.get("image_url", ""),
     )
 
 
@@ -64,7 +66,12 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         # 画像生成
         png_path = IMAGES_DIR / f"{name}.png"
         source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
-        generate_text_card(section.subtitle_text, source_name, png_path)
+        generate_text_card(
+            section.subtitle_text,
+            source_name,
+            png_path,
+            image_url=script.image_url or None,
+        )
 
         # クリップ合成
         audio = AudioFileClip(str(wav_path))

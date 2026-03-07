@@ -47,12 +47,16 @@ Python（feedparser + httpx）
     "source": "hackernews",
     "published_at": "2026-03-07T10:00:00Z",
     "summary_text": "RSS から取得した要約テキスト（英語）",
-    "full_text": ""
+    "full_text": "",
+    "image_url": ""
   }
 ]
 ```
 
 - `full_text`: RSS の要約が 200 文字未満の場合、httpx で本文を別途取得して格納する。それ以外は空文字列。
+- `image_url`: 記事の代表画像 URL。以下の優先順で抽出。見つからない場合は空文字列。
+  1. feedparser の `media:thumbnail` / `media:content` / `enclosures`
+  2. `full_text` 取得済みの場合は HTML 内の `og:image` メタタグ
 
 ---
 
@@ -72,6 +76,7 @@ class NewsArticle:
     published_at: datetime
     summary_text: str
     full_text: str = ""
+    image_url: str = ""
 ```
 
 ---

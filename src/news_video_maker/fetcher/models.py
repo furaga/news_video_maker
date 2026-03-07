@@ -11,3 +11,4 @@ class NewsArticle:
     published_at: datetime
     summary_text: str
     full_text: str = ""
+    image_url: str = ""
