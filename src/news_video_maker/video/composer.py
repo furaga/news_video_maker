@@ -276,6 +276,22 @@ def save_metadata(script: VideoScript, output_path: Path) -> Path:
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("メタデータ保存完了: %s", meta_path)
+
+    # YouTube用マークダウンファイルも出力
+    md_path = output_path.with_suffix(".md")
+    md_content = (
+        f"# タイトル\n"
+        f"{script.title}\n"
+        f"\n"
+        f"# 説明文\n"
+        f"この動画はAIを活用して海外テックニュースの情報収集・翻訳・編集を一部自動化して制作したものです。\n"
+        f"\n"
+        f"元記事: {script.source_url}\n"
+        f"#テックニュース #AI #セキュリティ\n"
+    )
+    md_path.write_text(md_content, encoding="utf-8")
+    logger.info("マークダウンメタデータ保存完了: %s", md_path)
+
     return meta_path
 
 
