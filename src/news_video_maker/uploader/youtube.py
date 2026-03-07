@@ -20,6 +20,7 @@ from news_video_maker.config import (
     YOUTUBE_SCOPES,
     YOUTUBE_TOKEN_PATH,
 )
+from news_video_maker.history import HistoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,12 @@ def main():
     url_file = PIPELINE_DIR / "05_youtube_url.txt"
     url_file.write_text(url, encoding="utf-8")
     print(f"YouTube URL: {url}")
+
+    # 履歴に記録
+    try:
+        HistoryStore().record(url=source_url, title=title, source=source, youtube_url=url)
+    except Exception as e:
+        logger.warning("履歴記録失敗: %s", e)
 
 
 if __name__ == "__main__":

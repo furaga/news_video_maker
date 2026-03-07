@@ -17,6 +17,8 @@
 cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.fetcher.rss
 ```
 
+ステージ 1 完了後、`.cache/pipeline/01_articles.json` を読み込み、配列が空（`[]`）なら「新規記事なし」として後続ステージをスキップし、report.md に「新規記事なし: 処理済み記事のみのため終了」と記録して終了する。
+
 ### ステージ 2: 記事選定・日本語要約
 `--from-stage` が 2 以下の場合、以下を実行:
 - Read ツールで `.cache/pipeline/01_articles.json` を読み込む
