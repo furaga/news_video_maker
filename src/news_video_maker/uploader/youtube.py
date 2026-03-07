@@ -12,6 +12,8 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
 from news_video_maker.config import (
+    CHANNEL_DESCRIPTION_FOOTER,
+    CHANNEL_HASHTAGS,
     PIPELINE_DIR,
     YOUTUBE_CLIENT_SECRET_PATH,
     YOUTUBE_PRIVACY,
@@ -148,11 +150,11 @@ def main():
         f"{summary}\n\n"
         f"元記事: {source_url}\n\n"
         "---\n"
-        "このチャンネルでは海外テックニュースを日本語で毎日お届けします。\n\n"
-        "#テックニュース #テクノロジー #ShortNews"
+        f"{CHANNEL_DESCRIPTION_FOOTER}\n\n"
+        f"{CHANNEL_HASHTAGS}"
     )
 
-    tags = ["tech news", "テックニュース", "テクノロジー", "ShortNews", source]
+    tags = [t.lstrip("#") for t in CHANNEL_HASHTAGS.split()] + [source]
 
     url = upload_video(video_path, title, description, tags)
 

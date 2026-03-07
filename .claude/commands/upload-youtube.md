@@ -18,6 +18,17 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 - `.cache/pipeline/04_video_path.txt` が存在すること
 - `.cache/pipeline/02_selected.json` と `.cache/pipeline/03_script.json` が存在すること
 
+## チャンネルブランディング設定（.env）
+
+以下の環境変数で動画の説明文・タグ・公開設定をカスタマイズできる:
+
+| 変数名 | デフォルト値 | 説明 |
+|---|---|---|
+| `CHANNEL_NAME` | `AIニュース1分解説` | 動画のhookバッジに表示されるチャンネル名 |
+| `CHANNEL_HASHTAGS` | `#AIニュース #テックニュース ...` | descriptionとタグに使うハッシュタグ |
+| `CHANNEL_DESCRIPTION_FOOTER` | `海外の最新AI・テックニュースを...` | descriptionのフッター文 |
+| `YOUTUBE_PRIVACY` | `public` | 公開設定（`public` / `unlisted` / `private`） |
+
 ## 初回認証
 
 初回実行時はブラウザで Google OAuth 認証画面が開く。
