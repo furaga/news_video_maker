@@ -26,7 +26,7 @@ MAX_ARTICLES = 30
 
 # VOICEVOX
 VOICEVOX_URL = os.getenv("VOICEVOX_URL", "http://localhost:50021")
-VOICEVOX_SPEAKER_ID = 3  # ずんだもん
+VOICEVOX_SPEAKER_ID = 13  # 青山龍星
 
 # YouTube
 YOUTUBE_CLIENT_SECRET_PATH = Path(
