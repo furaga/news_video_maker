@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 WIDTH, HEIGHT = 1080, 1920
 FPS = 30
-FADE_DURATION = 0.3   # セクション開始時のフェードイン時間
 
 # ---- HTML テンプレート -------------------------------------------------------
 
@@ -35,37 +34,38 @@ _SUBTITLE_TEMPLATE = """\
     position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
-    transform: scale(1.06);
+    transform: scale(1.0);
+    transform-origin: center center;
   }}
   .bg-overlay {{
     position: absolute; inset: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.30);
   }}
   /* タイトルバー（上部固定） */
   .title-bar {{
     position: absolute;
-    top: 60px; left: 60px; right: 60px;
+    top: 60px; left: 50px; right: 50px;
     z-index: 20;
   }}
   .title-bg {{
     display: inline-block;
-    background: rgba(0, 0, 0, 0.65);
-    border-radius: 16px;
-    padding: 20px 32px;
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.85);
+    border-left: 6px solid #FF4444;
+    border-radius: 0 12px 12px 0;
+    padding: 18px 28px;
     max-width: 100%;
   }}
   .title-text {{
-    font-size: 44px; font-weight: 900;
-    color: #ffffff;
-    line-height: 1.4;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    font-size: 46px; font-weight: 900;
+    color: #FFFFFF;
+    line-height: 1.35;
+    text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
     word-break: break-all;
   }}
   /* ソースラベル */
   .source-label {{
     position: absolute;
-    top: 230px; left: 60px;
+    top: 230px; left: 56px;
     z-index: 20;
     display: inline-flex;
     align-items: center; gap: 10px;
@@ -77,35 +77,38 @@ _SUBTITLE_TEMPLATE = """\
   }}
   .source-text {{
     font-size: 28px; font-weight: 700;
-    color: rgba(255,255,255,0.7);
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+    color: rgba(255,255,255,0.85);
+    text-shadow: 1px 1px 0 #000, -1px -1px 0 #000;
   }}
-  /* 字幕ボックス（下部中央） */
+  /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px） */
   .subtitle-area {{
     position: absolute;
-    bottom: 100px; left: 60px; right: 60px;
+    bottom: 500px; left: 50px; right: 50px;
     z-index: 20;
     display: flex; justify-content: center;
   }}
   .subtitle-bg {{
     display: inline-block;
-    background: rgba(0, 0, 0, 0.72);
-    border-radius: 16px;
-    padding: 24px 40px;
-    backdrop-filter: blur(4px);
+    background: transparent;
+    padding: 0;
     max-width: 100%;
   }}
   .subtitle-text {{
-    font-size: 56px; font-weight: 700;
-    color: #ffffff;
-    line-height: 1.5;
+    font-size: 64px; font-weight: 900;
+    color: #FFFF00;
+    line-height: 1.45;
     text-align: center;
-    text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+    text-shadow:
+      3px  3px 0 #000,
+      -3px -3px 0 #000,
+      3px -3px 0 #000,
+      -3px  3px 0 #000,
+      0    3px 0 #000,
+      3px  0   0 #000,
+      -3px 0   0 #000,
+      0   -3px 0 #000;
     word-break: break-all;
-  }}
-  #fade {{
-    position: absolute; inset: 0; z-index: 100;
-    background: #000; opacity: 1; pointer-events: none;
+    -webkit-text-stroke: 2px #000;
   }}
 </style>
 </head>
@@ -126,7 +129,6 @@ _SUBTITLE_TEMPLATE = """\
       <div class="subtitle-text" id="subtitle">{subtitle}</div>
     </div>
   </div>
-  <div id="fade"></div>
 </body>
 </html>
 """
@@ -148,7 +150,8 @@ _CTA_TEMPLATE = """\
     position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
-    transform: scale(1.06);
+    transform: scale(1.0);
+    transform-origin: center center;
   }}
   .bg-overlay {{
     position: absolute; inset: 0;
@@ -162,10 +165,9 @@ _CTA_TEMPLATE = """\
   }}
   .cta-bg {{
     display: inline-block;
-    background: rgba(0, 0, 0, 0.78);
+    background: rgba(0, 0, 0, 0.85);
     border-radius: 28px;
     padding: 60px 80px;
-    backdrop-filter: blur(8px);
     text-align: center;
   }}
   .cta-emoji {{
@@ -173,14 +175,19 @@ _CTA_TEMPLATE = """\
   }}
   .cta-text {{
     font-size: 68px; font-weight: 900;
-    color: #ffffff;
+    color: #FFFF00;
     line-height: 1.6;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    text-shadow:
+      3px  3px 0 #000,
+      -3px -3px 0 #000,
+      3px -3px 0 #000,
+      -3px  3px 0 #000,
+      0    3px 0 #000,
+      3px  0   0 #000,
+      -3px 0   0 #000,
+      0   -3px 0 #000;
     white-space: pre-line;
-  }}
-  #fade {{
-    position: absolute; inset: 0; z-index: 100;
-    background: #000; opacity: 1; pointer-events: none;
+    -webkit-text-stroke: 2px #000;
   }}
 </style>
 </head>
@@ -193,7 +200,6 @@ _CTA_TEMPLATE = """\
       <div class="cta-text">{cta_text}</div>
     </div>
   </div>
-  <div id="fade"></div>
 </body>
 </html>
 """
@@ -209,11 +215,11 @@ SOURCE_COLORS: dict[str, str] = {
 }
 
 
-def split_into_subtitle_chunks(text: str, max_chars: int = 22) -> list[str]:
+def split_into_subtitle_chunks(text: str, max_chars: int = 26) -> list[str]:
     """narration_text を字幕チャンクのリストに分割する。
 
     句読点（。！？）で区切り、1チャンクが max_chars 文字を超える場合は
-    読点（、）でさらに分割する。
+    読点（、）でさらに分割する。それでも長い場合はて/で形の文節境界で追加分割。
     """
     # 句点・感嘆符・疑問符で分割（区切り文字を含む形で保持）
     raw = re.split(r'(?<=[。！？])', text.strip())
@@ -223,23 +229,36 @@ def split_into_subtitle_chunks(text: str, max_chars: int = 22) -> list[str]:
     for sentence in raw:
         if len(sentence) <= max_chars:
             chunks.append(sentence)
-        else:
-            # 読点で分割
-            parts = re.split(r'(?<=、)', sentence)
-            current = ""
-            for part in parts:
-                if len(current) + len(part) <= max_chars:
-                    current += part
+            continue
+        # 読点で分割
+        parts = re.split(r'(?<=、)', sentence)
+        current = ""
+        for part in parts:
+            if len(current) + len(part) <= max_chars:
+                current += part
+            else:
+                if current:
+                    chunks.append(current)
+                # て/で形の文節境界でさらに分割試行
+                sub_parts = re.split(r'(?<=[てで])(?=[^\s、。！？])', part)
+                sub_current = ""
+                for sp in sub_parts:
+                    if len(sub_current) + len(sp) <= max_chars:
+                        sub_current += sp
+                    else:
+                        if sub_current:
+                            chunks.append(sub_current)
+                        # 強制分割（最終手段）
+                        while len(sp) > max_chars:
+                            chunks.append(sp[:max_chars])
+                            sp = sp[max_chars:]
+                        sub_current = sp
+                if sub_current:
+                    current = sub_current
                 else:
-                    if current:
-                        chunks.append(current)
-                    # part 自体が長い場合はさらに強制分割
-                    while len(part) > max_chars:
-                        chunks.append(part[:max_chars])
-                        part = part[max_chars:]
-                    current = part
-            if current:
-                chunks.append(current)
+                    current = ""
+        if current:
+            chunks.append(current)
 
     return chunks if chunks else [text]
 
@@ -320,10 +339,14 @@ async def _render_frames_async(
 ) -> list[np.ndarray]:
     """Playwright でフレームをレンダリングする。
 
-    各チャンクにつき chunk_duration 秒分のフレームを生成する。
-    セクション冒頭はフェードインアニメーション付き。
+    Ken Burns 効果: セクションローカル時間で scale 1.0→1.20 ＋ ゆっくりパン。
+    パン方向: section_start が偶数秒帯なら右パン (+1)、奇数秒帯なら左パン (-1)。
     """
     from playwright.async_api import async_playwright
+
+    # セクション全体の長さ（Ken Burns 進行計算用）
+    section_duration = max(sum(chunk_durations), 0.1)
+    pan_dir = 1 if int(section_start) % 2 == 0 else -1
 
     frames: list[np.ndarray] = []
 
@@ -344,25 +367,21 @@ async def _render_frames_async(
             n_frames = max(1, round(chunk_dur * FPS))
             for frame_i in range(n_frames):
                 t_in_chunk = frame_i / FPS
-                global_t = section_start + elapsed + t_in_chunk
+                local_elapsed = elapsed + t_in_chunk
 
                 await page.evaluate(
-                    """([globalT, totalDuration, tInChunk, fadeDuration, isFirst]) => {
+                    """([localElapsed, sectionDuration, panDir]) => {
                         const bgEl = document.getElementById('bg');
                         if (bgEl) {
-                            const bgScale = 1.06 + 0.08 * (globalT / totalDuration);
-                            bgEl.style.transform = 'scale(' + bgScale + ')';
-                        }
-                        const fade = document.getElementById('fade');
-                        if (fade) {
-                            if (isFirst && tInChunk < fadeDuration) {
-                                fade.style.opacity = 1 - tInChunk / fadeDuration;
-                            } else {
-                                fade.style.opacity = 0;
-                            }
+                            const progress = Math.min(localElapsed / sectionDuration, 1.0);
+                            const bgScale = 1.0 + 0.20 * progress;
+                            const panX = panDir * 40 * progress;
+                            const panY = -15 * progress;
+                            bgEl.style.transform =
+                                'scale(' + bgScale + ') translate(' + panX + 'px, ' + panY + 'px)';
                         }
                     }""",
-                    [global_t, total_duration, t_in_chunk, FADE_DURATION, chunk_idx == 0],
+                    [local_elapsed, section_duration, pan_dir],
                 )
 
                 screenshot = await page.screenshot(type="png")
@@ -438,8 +457,6 @@ def generate_cta_clip(
     total_duration: float = 60.0,
 ) -> VideoClip:
     """CTAセクション用 VideoClip を返す"""
-    cta_text = "高評価とチャンネル登録\\nよろしくお願いします！"
-
     html = _CTA_TEMPLATE.format(
         width=WIDTH,
         height=HEIGHT,

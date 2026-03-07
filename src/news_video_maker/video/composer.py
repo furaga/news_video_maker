@@ -2,7 +2,7 @@
 import base64
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -39,6 +39,7 @@ class ScriptSection:
     narration_text: str
     subtitle_text: str
     estimated_duration_sec: float
+    bg_prompt: str = field(default="")
 
 
 @dataclass
@@ -58,6 +59,7 @@ def load_script(path: Path) -> VideoScript:
             narration_text=s["narration_text"],
             subtitle_text=s["subtitle_text"],
             estimated_duration_sec=s["estimated_duration_sec"],
+            bg_prompt=s.get("bg_prompt", ""),
         )
         for s in data["sections"]
     ]
@@ -125,6 +127,10 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         logger.info("hookセクション用: 記事URLからスクリーンショットを取得: %s", script.source_url)
         hook_bg_data_url = screenshot_article_url(script.source_url) or ""
 
+    # セクションごとの bg_prompt を収集（存在する場合）
+    section_bg_prompts = [s.bg_prompt for s in all_sections]
+    custom_prompts = section_bg_prompts if any(section_bg_prompts) else None
+
     # AI生成背景画像（全セクション共通のフォールバック兼、hookセクション以外用）
     bg_list: list[str] = []
     ai_bg_results = generate_background_images(
@@ -132,6 +138,7 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         key_points,
         num_ai_images,
         IMAGES_DIR,
+        custom_prompts=custom_prompts,
     )
     for bg_path, _ in ai_bg_results:
         bg_list.append(_path_to_data_url(bg_path))

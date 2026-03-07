@@ -8,6 +8,12 @@ logger = logging.getLogger(__name__)
 OUTPUT_SIZE = (1080, 1920)
 MODEL_ID = "runwayml/stable-diffusion-v1-5"
 
+_NEGATIVE_PROMPT = (
+    "text, watermark, logo, signature, people, face, body parts, "
+    "ugly, blurry, low quality, distorted, deformed, artifacts, "
+    "cartoon, anime, painting, sketch"
+)
+
 
 def _build_prompt(article_title: str, keyword: str) -> tuple[str, str]:
     prompt = (
@@ -15,12 +21,7 @@ def _build_prompt(article_title: str, keyword: str) -> tuple[str, str]:
         "dark blue and cyan neon glow, bokeh, cinematic lighting, "
         "high detail, 8k, ultra realistic, vertical portrait"
     )
-    negative_prompt = (
-        "text, watermark, logo, signature, people, face, body parts, "
-        "ugly, blurry, low quality, distorted, deformed, artifacts, "
-        "cartoon, anime, painting, sketch"
-    )
-    return prompt, negative_prompt
+    return prompt, _NEGATIVE_PROMPT
 
 
 def _load_sd_pipeline(device: str, dtype):
@@ -47,10 +48,12 @@ def generate_background_images(
     key_points: list[str],
     num_images: int,
     output_dir: Path,
+    custom_prompts: list[str] | None = None,
 ) -> list[tuple[Path, str]]:
     """num_images 枚の背景画像を生成し (Path, prompt) リストを返す。
 
-    key_points を使って各画像のプロンプトを多様にする。
+    custom_prompts が渡された場合はそれをプロンプトとして使用する（bg_prompt フィールド対応）。
+    それ以外は key_points を使って各画像のプロンプトを生成する。
     bg_prompts.json にプロンプト一覧を保存する。
     diffusers 未インストール、または生成失敗時は空リストを返す。
     """
@@ -73,7 +76,7 @@ def generate_background_images(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # キーワードリスト: article_title + key_points を順番に使う
+    # キーワードリスト: article_title + key_points を順番に使う（custom_prompts がない場合）
     keywords = [article_title] + list(key_points)
     results: list[tuple[Path, str]] = []
     prompts_data = []
@@ -83,11 +86,18 @@ def generate_background_images(
         pipe = _load_sd_pipeline(device, dtype)
 
         for i in range(num_images):
-            keyword = keywords[i % len(keywords)]
-            prompt, negative_prompt = _build_prompt(article_title, keyword)
             out_path = output_dir / f"bg_{i:02d}.png"
 
-            logger.info("背景画像 %d/%d 生成中... キーワード: %s", i + 1, num_images, keyword)
+            if custom_prompts and i < len(custom_prompts):
+                # bg_prompt フィールドから直接プロンプトを使用
+                prompt = custom_prompts[i]
+                negative_prompt = _NEGATIVE_PROMPT
+                keyword = prompt[:60] + "..." if len(prompt) > 60 else prompt
+            else:
+                keyword = keywords[i % len(keywords)]
+                prompt, negative_prompt = _build_prompt(article_title, keyword)
+
+            logger.info("背景画像 %d/%d 生成中... プロンプト: %s", i + 1, num_images, prompt[:80])
             image = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
