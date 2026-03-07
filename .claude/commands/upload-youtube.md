@@ -4,6 +4,13 @@
 
 ## 手順
 
+### ステップ1: メタデータ生成
+
+`/gen-metadata` コマンドと同じ手順でメタデータを生成し、`.cache/pipeline/05_metadata.json` に保存する。
+（メタデータのみ再生成したい場合は `/gen-metadata` を単独で実行する）
+
+### ステップ2: YouTube アップロード（Python実行）
+
 Bash ツールで以下を実行:
 
 ```bash
@@ -17,6 +24,7 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 - `.env` に `YOUTUBE_CLIENT_SECRET_PATH` が設定されていること
 - `.cache/pipeline/04_video_path.txt` が存在すること
 - `.cache/pipeline/02_selected.json` と `.cache/pipeline/03_script.json` が存在すること
+- `.cache/pipeline/05_metadata.json` は本コマンドが自動生成する（存在しない場合は `youtube.py` がフォールバック動作）
 
 ## 初回認証
 
