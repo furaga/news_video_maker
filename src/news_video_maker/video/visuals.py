@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image
 from moviepy import VideoClip
 
+from news_video_maker.config import CHANNEL_NAME
+
 logger = logging.getLogger(__name__)
 
 WIDTH, HEIGHT = 1080, 1920
@@ -19,7 +21,7 @@ OUTRO_DURATION = 0.4   # アウトロスクロール時間
 
 # セクションタイプごとの視覚スタイル定義
 _SECTION_STYLES: dict[str, dict] = {
-    "hook":   {"badge": "TODAY'S TECH", "accent": "#00dcc2", "card_bg": "rgba(0, 55, 58, 0.90)",  "is_title": True,  "number": ""},
+    "hook":   {"badge": CHANNEL_NAME,   "accent": "#00dcc2", "card_bg": "rgba(0, 55, 58, 0.90)",  "is_title": True,  "number": ""},
     "main_1": {"badge": "概要",         "accent": "#00dcc2", "card_bg": "rgba(0, 28, 50, 0.86)",  "number": "01"},
     "main_2": {"badge": "詳細",         "accent": "#4a8fff", "card_bg": "rgba(8, 22, 62, 0.86)",  "number": "02"},
     "main_3": {"badge": "関連情報",     "accent": "#a855f7", "card_bg": "rgba(30, 8, 58, 0.86)",  "number": "03"},
