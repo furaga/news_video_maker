@@ -14,6 +14,9 @@ SOURCE_FONT_SIZE = 32
 
 # 優先順にフォントパスを試す
 FONT_CANDIDATES = [
+    "C:/Windows/Fonts/NotoSansJP-VF.ttf",
+    "C:/Windows/Fonts/BIZ-UDGothicB.ttc",
+    "C:/Windows/Fonts/YuGothB.ttc",
     "C:/Windows/Fonts/meiryo.ttc",
     "C:/Windows/Fonts/YuGothM.ttc",
     "C:/Windows/Fonts/msgothic.ttc",
