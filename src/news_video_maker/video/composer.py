@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 from moviepy import AudioFileClip, concatenate_videoclips
 
@@ -17,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ScriptSection:
-    type: Literal["hook", "main", "outro"]
+    type: str  # hook / main_1 / main_2 / main_3 / main_4 / main / outro
     narration_text: str
     subtitle_text: str
     estimated_duration_sec: float
@@ -57,6 +56,8 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     clips = []
 
     source_name = script.source_url.split("/")[2] if script.source_url else "unknown"
+    # hookセクション用の表示タイトル（YouTubeタイトルからハッシュタグを除去）
+    display_title = script.title.split("#")[0].strip() if script.title else ""
 
     for i, section in enumerate(script.sections):
         name = f"{i:02d}_{section.type}"
@@ -74,6 +75,8 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             script.source_url,
             duration,
             image_url=script.image_url or None,
+            section_type=section.type,
+            display_title=display_title if section.type == "hook" else "",
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
