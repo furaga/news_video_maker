@@ -22,8 +22,18 @@ CARD_GAP = 60        # カード間隔（px）
 CARD_STEP = CARD_HEIGHT + CARD_GAP  # 340px
 
 # 上ゾーン（記事プレビュー）の定数
-SCREENSHOT_HEIGHT = 700  # 記事プレビューゾーンの高さ（px）
-STACK_CENTER = SCREENSHOT_HEIGHT + (HEIGHT - SCREENSHOT_HEIGHT) // 2  # = 1310
+SCREENSHOT_HEIGHT = 550   # 記事プレビューゾーンの高さ（px）
+CARD_TOP_PADDING = 40     # 記事プレビューとカードの間隔（px）
+# translateY は #stack の top 位置からの相対: stackCenter = CARD_TOP_PADDING + CARD_HEIGHT // 2
+STACK_CENTER = CARD_TOP_PADDING + CARD_HEIGHT // 2  # = 180
+
+# ソース別ブランドカラー
+SOURCE_COLORS: dict[str, str] = {
+    "techcrunch": "#1a7f37",
+    "arstechnica": "#dd3333",
+    "theverge": "#fa4718",
+    "hackernews": "#ff6600",
+}
 
 # セクションタイプごとのアクセントカラー定義
 _SECTION_STYLES: dict[str, dict] = {
@@ -67,49 +77,42 @@ _STACK_TEMPLATE = """\
       rgba(5, 10, 30, 0.3) 70%, rgba(5, 10, 30, 0.8) 100%
     );
   }}
-  /* --- 記事プレビューゾーン (上ゾーン: 0〜{screenshot_height}px) --- */
+  /* 記事プレビューゾーン: 左=記事画像、右=ブランドカラー+見出し */
   .article-preview {{
     position: absolute;
     top: 0; left: 0; right: 0;
     height: {screenshot_height}px;
-    overflow: hidden;
-    display: flex; flex-direction: column;
+    display: flex; flex-direction: row;
     z-index: 10;
   }}
-  .browser-chrome {{
-    flex-shrink: 0;
-    height: 60px;
-    background: #1e2433;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-    display: flex; align-items: center; gap: 12px;
-    padding: 0 24px;
-  }}
-  .chrome-dot {{ width: 14px; height: 14px; border-radius: 50%; }}
-  .chrome-dot.red    {{ background: #ff5f57; }}
-  .chrome-dot.yellow {{ background: #ffbd2e; }}
-  .chrome-dot.green  {{ background: #28c940; }}
-  .chrome-urlbar {{
-    flex: 1; height: 34px;
-    background: #0d1117; border-radius: 8px;
-    display: flex; align-items: center; padding: 0 14px;
-    font-size: 22px; color: #6a7a8a;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }}
-  .article-image {{
-    flex: 1;
+  .article-img-panel {{
+    width: 50%;
     background-image: url('{bg_data_url}');
-    background-size: cover; background-position: center top;
+    background-size: cover; background-position: center;
   }}
-  .article-headline {{
-    flex-shrink: 0;
-    min-height: 210px;
-    background: rgba(10, 15, 30, 0.92);
-    padding: 24px 48px;
-    display: flex; align-items: center;
-    font-size: 52px; font-weight: 700;
-    color: #f0f4ff; line-height: 1.45;
-    border-top: 2px solid rgba(0, 220, 194, 0.35);
-    overflow: hidden;
+  .article-text-panel {{
+    width: 50%;
+    background: {source_color};
+    display: flex; flex-direction: column;
+    padding: 48px 40px;
+  }}
+  .article-source-label {{
+    font-size: 22px; font-weight: 700;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 36px;
+  }}
+  .article-title-preview {{
+    font-size: 44px; font-weight: 800;
+    color: #fff; line-height: 1.22;
+    flex: 1; overflow: hidden;
+  }}
+  .article-meta-preview {{
+    font-size: 20px;
+    color: rgba(255,255,255,0.65);
+    margin-top: 20px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }}
   #stack {{
     position: absolute;
@@ -155,14 +158,12 @@ _STACK_TEMPLATE = """\
   <div class="bg"></div>
   <div class="bg-overlay"></div>
   <div class="article-preview">
-    <div class="browser-chrome">
-      <div class="chrome-dot red"></div>
-      <div class="chrome-dot yellow"></div>
-      <div class="chrome-dot green"></div>
-      <div class="chrome-urlbar">{source_url}</div>
+    <div class="article-img-panel"></div>
+    <div class="article-text-panel">
+      <div class="article-source-label">{source}</div>
+      <div class="article-title-preview">{article_title}</div>
+      <div class="article-meta-preview">{source_domain}</div>
     </div>
-    <div class="article-image"></div>
-    <div class="article-headline">{article_title}</div>
   </div>
   <div id="stack">
 {cards_html}
@@ -205,6 +206,7 @@ def _build_stack_html(
     source_url: str,
     bg_data_url: str,
     article_title: str = "",
+    source_color: str = "#1a7f37",
 ) -> str:
     """全カードを縦積みにしたHTML文字列を組み立てる"""
     cards_html = ""
@@ -225,6 +227,8 @@ def _build_stack_html(
         cards_html=cards_html,
         screenshot_height=SCREENSHOT_HEIGHT,
         article_title=html_module.escape(article_title),
+        source_color=source_color,
+        source_domain=html_module.escape(source_url.split("/")[2] if source_url and "/" in source_url else source),
     )
 
 
@@ -325,6 +329,7 @@ def generate_stack_clip(
     duration: float,
     bg_data_url: str = "",
     article_title: str = "",
+    source_color: str = "#1a7f37",
 ) -> VideoClip:
     """全カードを縦積みにして、active_index のカードを中央に表示する VideoClip を返す。
 
@@ -333,7 +338,12 @@ def generate_stack_clip(
     prev_index: ひとつ前のカードのインデックス（スクロールアニメーション用）
     article_title: 記事プレビューゾーンに表示する記事見出し
     """
-    html = _build_stack_html(all_cards, active_index, prev_index, source, source_url, bg_data_url, article_title)
+    html = _build_stack_html(
+        all_cards, active_index, prev_index,
+        source, source_url, bg_data_url,
+        article_title=article_title,
+        source_color=source_color,
+    )
 
     # イントロ + ホールドの2段階レンダリング
     intro_times = [i / FPS for i in range(int(INTRO_DURATION * FPS) + 1)]
