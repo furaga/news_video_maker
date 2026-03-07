@@ -63,7 +63,9 @@ VOICEVOX の話者 ID は `config.py` で設定可能にする。
 各セクションの背景テキストカード（PNG）を生成する:
 
 - サイズ: 1080 × 1920 px
-- 背景: グラデーション（紺色 → 深青）
+- 背景（優先順）:
+  1. `image_url` が指定されている場合: 記事画像をダウンロードして Cover crop（1080×1920）し、半透明の黒オーバーレイ（透明度 55%）を重ねる
+  2. 画像なし・取得失敗の場合: グラデーション（紺色 → 深青）にフォールバック
 - テキスト: `subtitle_text` を中央寄せで表示
   - フォント: システムの日本語フォント（`C:/Windows/Fonts/meiryo.ttc` または `YuGothic`）
   - フォントサイズ: 72px
@@ -100,9 +102,9 @@ def synthesize(text: str, speaker_id: int, output_path: Path) -> Path: ...
 
 ```python
 # Pillow テキストカード生成
-# 入力: subtitle_text, source_name
+# 入力: subtitle_text, source_name, image_url（省略可）
 # 出力: PNG ファイルパス
-def generate_text_card(subtitle_text: str, source: str, output_path: Path) -> Path: ...
+def generate_text_card(subtitle_text: str, source: str, output_path: Path, image_url: str | None = None) -> Path: ...
 ```
 
 ### `src/news_video_maker/video/composer.py`

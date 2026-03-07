@@ -1,6 +1,7 @@
 """RSSフィード取得・記事変換"""
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -42,6 +43,49 @@ def _parse_time(entry) -> datetime | None:
             except Exception:
                 pass
     return None
+
+
+def _extract_feedparser_image(entry) -> str:
+    """feedparserエントリから画像URLを抽出（media:thumbnail → media:content → enclosures の順）"""
+    # media:thumbnail
+    thumbnails = getattr(entry, "media_thumbnail", None)
+    if thumbnails and isinstance(thumbnails, list) and thumbnails:
+        url = thumbnails[0].get("url", "")
+        if url:
+            return url
+
+    # media:content
+    media_content = getattr(entry, "media_content", None)
+    if media_content and isinstance(media_content, list):
+        for m in media_content:
+            if m.get("medium") == "image" or m.get("type", "").startswith("image/"):
+                url = m.get("url", "")
+                if url:
+                    return url
+
+    # enclosures
+    enclosures = getattr(entry, "enclosures", None)
+    if enclosures and isinstance(enclosures, list):
+        for e in enclosures:
+            if e.get("type", "").startswith("image/"):
+                url = e.get("href", "")
+                if url:
+                    return url
+
+    return ""
+
+
+def _extract_og_image(html: str) -> str:
+    """HTMLからog:imageを正規表現で抽出"""
+    patterns = [
+        r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+        r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, html, re.IGNORECASE)
+        if m:
+            return m.group(1)
+    return ""
 
 
 def _fetch_full_text(url: str) -> str:
@@ -95,8 +139,14 @@ def fetch_articles() -> list[NewsArticle]:
                     summary_text=summary,
                 )
 
+                # feedparserから画像を試みる
+                article.image_url = _extract_feedparser_image(entry)
+
                 if len(summary) < 200:
                     article.full_text = _fetch_full_text(url)
+                    # full_text取得済みならog:imageも試みる
+                    if not article.image_url and article.full_text:
+                        article.image_url = _extract_og_image(article.full_text)
 
                 articles.append(article)
 
@@ -120,6 +170,7 @@ def save_articles(articles: list[NewsArticle], path: Path) -> None:
             "published_at": a.published_at.isoformat(),
             "summary_text": a.summary_text,
             "full_text": a.full_text,
+            "image_url": a.image_url,
         }
         for a in articles
     ]

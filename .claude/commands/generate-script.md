@@ -24,6 +24,7 @@
 {
   "title": "動画タイトル（60文字以内、#テックニュース #ShortNews を末尾に）",
   "source_url": "https://...",
+  "image_url": "https://... (02_selected.json の image_url をそのまま引き継ぐ。なければ空文字)",
   "total_duration_sec": 45.0,
   "sections": [
     {
