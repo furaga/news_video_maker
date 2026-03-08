@@ -4,7 +4,8 @@
       "Bash(python:*)",
       "Bash(PYTHONIOENCODING=utf-8 python:*)",
       "WebFetch(domain:techcrunch.com)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(git branch:*)"
     ]
   }
 }
