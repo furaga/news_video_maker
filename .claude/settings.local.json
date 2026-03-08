@@ -5,7 +5,13 @@
       "Bash(PYTHONIOENCODING=utf-8 python:*)",
       "WebFetch(domain:techcrunch.com)",
       "Bash(uv run:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(mkdir -p /c/Users/furag/Documents/prog/python/wt-subtitle-sync/.cache/pipeline)",
+      "Bash(cp /c/Users/furag/Documents/prog/python/news_video_maker/.cache/pipeline/*.json /c/Users/furag/Documents/prog/python/wt-subtitle-sync/.cache/pipeline/)",
+      "Bash(cp /c/Users/furag/Documents/prog/python/news_video_maker/.cache/pipeline/*.txt /c/Users/furag/Documents/prog/python/wt-subtitle-sync/.cache/pipeline/)",
+      "Bash(git:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)"
     ]
   }
 }

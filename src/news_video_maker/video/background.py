@@ -33,13 +33,7 @@ def _load_sd_pipeline(device: str, dtype):
         safety_checker=None,
     )
     pipe.enable_attention_slicing()
-    if device == "cuda":
-        try:
-            pipe.enable_model_cpu_offload()
-        except Exception:
-            pipe = pipe.to(device)
-    else:
-        pipe = pipe.to(device)
+    pipe = pipe.to(device)
     return pipe
 
 
@@ -81,6 +75,23 @@ def generate_background_images(
     results: list[tuple[Path, str]] = []
     prompts_data = []
 
+    # キャッシュチェック: すべての画像が既に存在する場合はスキップ
+    all_cached = True
+    for i in range(num_images):
+        out_path = output_dir / f"bg_{i:02d}.png"
+        if not out_path.exists():
+            all_cached = False
+            break
+
+    if all_cached:
+        logger.info("背景画像 %d 枚がキャッシュ済み。SD 生成をスキップします", num_images)
+        for i in range(num_images):
+            out_path = output_dir / f"bg_{i:02d}.png"
+            prompt = (custom_prompts[i] if custom_prompts and i < len(custom_prompts)
+                      else f"cached_{i}")
+            results.append((out_path, prompt))
+        return results
+
     try:
         logger.info("Stable Diffusion モデルを読み込み中: %s", MODEL_ID)
         pipe = _load_sd_pipeline(device, dtype)
@@ -112,6 +123,9 @@ def generate_background_images(
             logger.info("背景画像生成完了: %s", out_path)
 
             results.append((out_path, prompt))
+            if device == "cuda":
+                import torch as _torch
+                _torch.cuda.empty_cache()
             prompts_data.append({
                 "index": i,
                 "path": str(out_path),
@@ -122,6 +136,15 @@ def generate_background_images(
     except Exception as e:
         logger.warning("背景画像生成に失敗しました: %s", e)
         return []
+    finally:
+        # SD パイプラインを明示的に解放（Playwright レンダリング用のメモリを確保）
+        if "pipe" in dir():
+            del pipe
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info("SD パイプラインのメモリを解放しました")
 
     # プロンプト一覧を保存
     prompts_json = output_dir / "bg_prompts.json"
