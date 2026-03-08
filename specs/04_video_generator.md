@@ -98,6 +98,21 @@ VOICEVOX の話者 ID は `config.py` で設定可能にする。
 6. `write_videofile()` で MP4 出力
    - `codec="libx264"`, `audio_codec="aac"`, `fps=30`
 
+### 字幕タイミング計算
+
+字幕チャンクのタイミングは以下の方法で決定する（文字数比率は使用しない）:
+
+1. `display_text` を 。！？ で文ごとに分割
+2. `narration_text` を同じ区切りで分割（文数が一致していること前提）
+3. 各 `narration_text` の文を VOICEVOX で個別合成し、実際の音声長を測定
+4. 各文の音声長の比率でセクションの総尺を分配
+5. 文内のサブチャンク（`**keyword**` 境界）は文字数比率で按分
+
+この方式により、文字数では予測できない VOICEVOX の読み上げ速度の違いを正確に反映できる。
+個別合成の WAV は `.cache/audio/sentences/` にキャッシュする。
+
+**制約**: `narration_text` と `display_text` の文数（。！？ による区切り数）は一致していなければならない。
+
 ---
 
 ## モジュール構成

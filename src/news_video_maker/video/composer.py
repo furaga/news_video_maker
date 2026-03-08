@@ -1,5 +1,6 @@
 """moviepy 動画合成"""
 import base64
+import hashlib
 import json
 import logging
 import re
@@ -66,16 +67,14 @@ def _split_display_text(display_text: str, max_chars: int = 26) -> list[str]:
 
 
 def _calc_chunk_durations(
-    chunks: list[str], total_duration: float, ref_chunks: list[str] | None = None
+    chunks: list[str], total_duration: float
 ) -> list[float]:
     """文字数比で各チャンクの表示時間を配分する（マークアップ除外）。
 
-    ref_chunks が指定された場合、そちらの文字数比を使用する。
-    display_text（英語キーワード含む）ではなく subtitle_text（日本語読み）で
-    タイミングを計算するために使用する。
+    同一文内のサブチャンク按分に使用する。
+    文をまたいだタイミングは _get_sentence_durations で VOICEVOX 実測値を使うこと。
     """
-    source = ref_chunks if ref_chunks else chunks
-    clean_lens = [len(re.sub(r'\*\*(.+?)\*\*', r'\1', c)) for c in source]
+    clean_lens = [len(re.sub(r'\*\*(.+?)\*\*', r'\1', c)) for c in chunks]
     total_chars = sum(clean_lens)
     if total_chars == 0:
         return [total_duration / len(chunks)] * len(chunks)
@@ -85,51 +84,40 @@ def _calc_chunk_durations(
     return durs
 
 
-def _split_ref_text_at_display_boundaries(
-    display_chunks: list[str], ref_text: str
-) -> list[str]:
-    """display_chunks と同じ句点(。！？)境界で ref_text を分割する。
+def _split_at_sentence_boundaries(text: str) -> list[str]:
+    """。！？ で分割し、区切り文字を末尾に残したチャンクを返す。"""
+    parts = re.split(r'(?<=[。！？])', text)
+    return [p for p in parts if p.strip()]
 
-    display_text は英語キーワードを含むため文字数が narration/subtitle と異なる。
-    句点の出現位置をアンカーとして subtitle_text を同じセグメントに分割し、
-    音声タイミングに近い文字数比を得る。
+
+def _get_sentence_durations(
+    narration_sentences: list[str],
+    total_duration: float,
+    cache_dir: Path,
+) -> list[float]:
+    """各文を VOICEVOX で個別合成して音声長を測定し、total_duration に正規化して返す。
+
+    個別合成 WAV は cache_dir/sentences/ にキャッシュする。
     """
-    _PERIOD_CHARS = set("。！？")
+    if len(narration_sentences) <= 1:
+        return [total_duration]
 
-    # 各 display_chunk 内の句点数をカウント
-    clean_chunks = [re.sub(r'\*\*(.+?)\*\*', r'\1', c) for c in display_chunks]
-    period_counts = [sum(1 for ch in c if ch in _PERIOD_CHARS) for c in clean_chunks]
+    sent_durations = []
+    for i, sentence in enumerate(narration_sentences):
+        key = hashlib.md5(sentence.encode()).hexdigest()[:8]
+        wav_path = cache_dir / "sentences" / f"{key}_{i}.wav"
+        wav_path.parent.mkdir(parents=True, exist_ok=True)
+        if not wav_path.exists():
+            synthesize(sentence, wav_path)
+        audio = AudioFileClip(str(wav_path))
+        sent_durations.append(audio.duration)
+        audio.close()
 
-    result: list[str] = []
-    ref_pos = 0
+    total_sent = sum(sent_durations)
+    if total_sent == 0:
+        return [total_duration / len(narration_sentences)] * len(narration_sentences)
 
-    for i, pcount in enumerate(period_counts[:-1]):
-        if pcount > 0:
-            # ref_text 内で同数の句点を見つけてそこで切る
-            found = 0
-            cut_pos = ref_pos
-            for j in range(ref_pos, len(ref_text)):
-                if ref_text[j] in _PERIOD_CHARS:
-                    found += 1
-                    if found == pcount:
-                        cut_pos = j + 1
-                        break
-            result.append(ref_text[ref_pos:cut_pos])
-            ref_pos = cut_pos
-        else:
-            # 句点なし: clean_chunks の文字数比で按分
-            remaining_clean = sum(len(c) for c in clean_chunks[i:])
-            if remaining_clean > 0:
-                prop = len(clean_chunks[i]) / remaining_clean
-                chars = max(1, int(prop * (len(ref_text) - ref_pos)))
-                result.append(ref_text[ref_pos:ref_pos + chars])
-                ref_pos += chars
-            else:
-                result.append("")
-
-    # 最後のチャンク: 残り全部
-    result.append(ref_text[ref_pos:])
-    return result
+    return [d / total_sent * total_duration for d in sent_durations]
 
 logger = logging.getLogger(__name__)
 
@@ -277,11 +265,24 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
 
         # 字幕チャンク生成: display_text があればマークアップ保持で分割、なければ narration_text を使用
         if section.display_text:
-            chunks = _split_display_text(section.display_text)
-            # subtitle_text の文字数比でタイミング計算（英語キーワードと日本語読みの文字数差を補正）
-            ref_text = section.subtitle_text or section.narration_text
-            ref_chunks = _split_ref_text_at_display_boundaries(chunks, ref_text)
-            chunk_durs = _calc_chunk_durations(chunks, duration, ref_chunks=ref_chunks)
+            display_sentences = _split_at_sentence_boundaries(section.display_text)
+            narration_sentences = _split_at_sentence_boundaries(section.narration_text)
+            if len(display_sentences) != len(narration_sentences):
+                logger.warning(
+                    "display_textとnarration_textの文数が一致しません (%d vs %d): %s",
+                    len(display_sentences), len(narration_sentences), section.type,
+                )
+                display_sentences = [section.display_text]
+                sentence_durs = [duration]
+            else:
+                sentence_durs = _get_sentence_durations(narration_sentences, duration, AUDIO_DIR)
+            chunks = []
+            chunk_durs = []
+            for display_sent, sent_dur in zip(display_sentences, sentence_durs):
+                sub_chunks = _split_display_text(display_sent)
+                sub_durs = _calc_chunk_durations(sub_chunks, sent_dur)
+                chunks.extend(sub_chunks)
+                chunk_durs.extend(sub_durs)
         else:
             chunks = split_into_subtitle_chunks(section.narration_text)
             chunk_durs = _calc_chunk_durations(chunks, duration)
