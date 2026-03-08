@@ -38,6 +38,11 @@ class HistoryStore:
         """URLが投稿済みかチェック"""
         return url in self.seen_urls()
 
+    def seen_titles(self, limit: int = 30) -> list[str]:
+        """最近投稿済みのタイトルリスト（新しい順、最大 limit 件）"""
+        entries = self._data.get("entries", [])
+        return [e["title"] for e in reversed(entries[-limit:])]
+
     def record(self, url: str, title: str, source: str, youtube_url: str) -> None:
         """アップロード成功後に記録して保存"""
         entry = {
