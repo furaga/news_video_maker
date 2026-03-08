@@ -65,9 +65,17 @@ def _split_display_text(display_text: str, max_chars: int = 26) -> list[str]:
     return result if result else [display_text]
 
 
-def _calc_chunk_durations(chunks: list[str], total_duration: float) -> list[float]:
-    """文字数比で各チャンクの表示時間を配分する（マークアップ除外）"""
-    clean_lens = [len(re.sub(r'\*\*(.+?)\*\*', r'\1', c)) for c in chunks]
+def _calc_chunk_durations(
+    chunks: list[str], total_duration: float, ref_chunks: list[str] | None = None
+) -> list[float]:
+    """文字数比で各チャンクの表示時間を配分する（マークアップ除外）。
+
+    ref_chunks が指定された場合、そちらの文字数比を使用する。
+    display_text（英語キーワード含む）ではなく subtitle_text（日本語読み）で
+    タイミングを計算するために使用する。
+    """
+    source = ref_chunks if ref_chunks else chunks
+    clean_lens = [len(re.sub(r'\*\*(.+?)\*\*', r'\1', c)) for c in source]
     total_chars = sum(clean_lens)
     if total_chars == 0:
         return [total_duration / len(chunks)] * len(chunks)
@@ -75,6 +83,53 @@ def _calc_chunk_durations(chunks: list[str], total_duration: float) -> list[floa
     # 浮動小数点の丸め誤差を最終チャンクで吸収
     durs[-1] += total_duration - sum(durs)
     return durs
+
+
+def _split_ref_text_at_display_boundaries(
+    display_chunks: list[str], ref_text: str
+) -> list[str]:
+    """display_chunks と同じ句点(。！？)境界で ref_text を分割する。
+
+    display_text は英語キーワードを含むため文字数が narration/subtitle と異なる。
+    句点の出現位置をアンカーとして subtitle_text を同じセグメントに分割し、
+    音声タイミングに近い文字数比を得る。
+    """
+    _PERIOD_CHARS = set("。！？")
+
+    # 各 display_chunk 内の句点数をカウント
+    clean_chunks = [re.sub(r'\*\*(.+?)\*\*', r'\1', c) for c in display_chunks]
+    period_counts = [sum(1 for ch in c if ch in _PERIOD_CHARS) for c in clean_chunks]
+
+    result: list[str] = []
+    ref_pos = 0
+
+    for i, pcount in enumerate(period_counts[:-1]):
+        if pcount > 0:
+            # ref_text 内で同数の句点を見つけてそこで切る
+            found = 0
+            cut_pos = ref_pos
+            for j in range(ref_pos, len(ref_text)):
+                if ref_text[j] in _PERIOD_CHARS:
+                    found += 1
+                    if found == pcount:
+                        cut_pos = j + 1
+                        break
+            result.append(ref_text[ref_pos:cut_pos])
+            ref_pos = cut_pos
+        else:
+            # 句点なし: clean_chunks の文字数比で按分
+            remaining_clean = sum(len(c) for c in clean_chunks[i:])
+            if remaining_clean > 0:
+                prop = len(clean_chunks[i]) / remaining_clean
+                chars = max(1, int(prop * (len(ref_text) - ref_pos)))
+                result.append(ref_text[ref_pos:ref_pos + chars])
+                ref_pos += chars
+            else:
+                result.append("")
+
+    # 最後のチャンク: 残り全部
+    result.append(ref_text[ref_pos:])
+    return result
 
 logger = logging.getLogger(__name__)
 
@@ -223,9 +278,13 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         # 字幕チャンク生成: display_text があればマークアップ保持で分割、なければ narration_text を使用
         if section.display_text:
             chunks = _split_display_text(section.display_text)
+            # subtitle_text の文字数比でタイミング計算（英語キーワードと日本語読みの文字数差を補正）
+            ref_text = section.subtitle_text or section.narration_text
+            ref_chunks = _split_ref_text_at_display_boundaries(chunks, ref_text)
+            chunk_durs = _calc_chunk_durations(chunks, duration, ref_chunks=ref_chunks)
         else:
             chunks = split_into_subtitle_chunks(section.narration_text)
-        chunk_durs = _calc_chunk_durations(chunks, duration)
+            chunk_durs = _calc_chunk_durations(chunks, duration)
 
         audio = AudioFileClip(str(wav_path))
         video_clip = generate_subtitle_clip(
@@ -271,9 +330,11 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
 
 def save_metadata(script: VideoScript, output_path: Path) -> Path:
     """動画と同名の .json メタデータファイルを output/ に保存する"""
+    # YouTube用タイトルから **keyword** マークアップを除去
+    clean_title = re.sub(r'\*\*(.+?)\*\*', r'\1', script.title)
     meta_path = output_path.with_suffix(".json")
     meta = {
-        "title": script.title,
+        "title": clean_title,
         "source_url": script.source_url,
         "image_url": script.image_url,
         "video_path": str(output_path.resolve()),
@@ -285,7 +346,7 @@ def save_metadata(script: VideoScript, output_path: Path) -> Path:
     md_path = output_path.with_suffix(".md")
     md_content = (
         f"# タイトル\n"
-        f"{script.title}\n"
+        f"{clean_title}\n"
         f"\n"
         f"# 説明文\n"
         f"この動画はAIを活用して海外テックニュースの情報収集・翻訳・編集を一部自動化して制作したものです。\n"
