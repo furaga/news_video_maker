@@ -30,9 +30,14 @@ def _summarize_tool_input(name: str, inp: dict) -> str:
     return str(inp)[:60]
 
 
-async def run(dry_run: bool = False, from_stage: int = 1) -> int:
+async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "") -> int:
     """パイプラインを実行して終了コードを返す"""
-    args_parts = []
+    # 実行IDを生成してキャッシュディレクトリを分離（並列実行対応）
+    if not run_id:
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.environ["PIPELINE_RUN_ID"] = run_id
+
+    args_parts = [f"--run-id {run_id}"]
     if from_stage > 1:
         args_parts.append(f"--from-stage {from_stage}")
     if dry_run:
@@ -42,7 +47,7 @@ async def run(dry_run: bool = False, from_stage: int = 1) -> int:
     now = datetime.now()
     log_dir = os.path.join(PROJECT_DIR, "logs", now.strftime("%Y%m%d"))
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(log_dir, f"pipeline_{now.strftime('%H%M%S')}.log")
+    log_path = os.path.join(log_dir, f"pipeline_{run_id}.log")
 
     options = ClaudeAgentOptions(
         cwd=PROJECT_DIR,
@@ -55,7 +60,7 @@ async def run(dry_run: bool = False, from_stage: int = 1) -> int:
     exit_code = 0
     log_file = open(log_path, "w", encoding="utf-8", buffering=1)
     try:
-        _log(f"=== パイプライン開始 from_stage={from_stage} dry_run={dry_run} ===", log_file)
+        _log(f"=== パイプライン開始 run_id={run_id} from_stage={from_stage} dry_run={dry_run} ===", log_file)
         _log(f"ログ: {log_path}", log_file)
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, AssistantMessage):
