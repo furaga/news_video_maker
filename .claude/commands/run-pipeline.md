@@ -38,6 +38,18 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.video.composer
 ```
 
+### ステージ 4.5: 動画検証（技術チェック + フレーム抽出）
+ステージ 4 完了後に以下を実行:
+```bash
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.video.validator
+```
+- 終了コード 1 の場合（`ok: false`）: エラーを report.md に記録してパイプラインを停止する
+- 成功時: `.cache/pipeline/04_validation.json` と `.cache/pipeline/frames/` が生成される
+
+### ステージ 4.6: 動画検証（視覚チェック）
+`/validate-video` コマンドを実行して Claude Code にフレームを目視確認させる。
+- 視覚チェック NG の場合はエラー内容を report.md に記録してパイプラインを停止する
+
 ### ステージ 5: YouTube 投稿
 `--dry-run` でない場合かつ `--from-stage` が 5 以下の場合、以下を順に実行:
 
