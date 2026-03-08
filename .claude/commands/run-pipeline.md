@@ -25,10 +25,24 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 ### ステージ 2: 記事選定・日本語要約
 `--from-stage` が 2 以下の場合、以下を実行:
-- Read ツールで `.cache/pipeline/{run_id}/01_articles.json` を読み込む
-- 記事をスコアリングして最良の1件を選定
-- 日本語タイトル・要約・キーポイントを生成
-- Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存
+
+1. **過去採用タイトルを取得（ネタ被り防止）**:
+   - Bash で `.cache/pipeline/` 以下の全 `02_selected.json` を列挙する:
+     ```bash
+     ls .cache/pipeline/*/02_selected.json 2>/dev/null
+     ```
+   - 見つかったファイル（現在の `{run_id}` のものは除く）を Read ツールで読み込み、`title`（英語原題）と `japanese_title`（日本語タイトル）を収集し `past_titles` リストとして保持する
+   - ファイルが1件もない場合は `past_titles = []` とする
+
+2. **記事をスコアリングして最良の1件を選定**:
+   - Read ツールで `.cache/pipeline/{run_id}/01_articles.json` を読み込む
+   - 各記事を 1〜10 点でスコアリング
+   - `past_titles` に含まれる過去記事と主題・企業・技術が重複または類似する場合は **-3点** のペナルティ（ネタ被り防止）
+   - 最高スコアの記事を選定
+
+3. **日本語タイトル・要約・キーポイントを生成**
+
+4. **Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存**
 
 ### ステージ 3: 台本生成
 `--from-stage` が 3 以下の場合、以下を実行:
