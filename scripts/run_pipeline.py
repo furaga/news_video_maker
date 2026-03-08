@@ -25,9 +25,14 @@ def main():
         metavar="N",
         help="ステージ N から再開 (1=fetch, 2=process, 3=script, 4=video, 5=upload)",
     )
+    parser.add_argument(
+        "--run-id",
+        default="",
+        help="実行ID（省略時は自動生成。複数同時実行時に明示指定するとキャッシュが分離される）",
+    )
     args = parser.parse_args()
 
-    exit_code = anyio.run(run, args.dry_run, args.from_stage)
+    exit_code = anyio.run(run, args.dry_run, args.from_stage, args.run_id)
     sys.exit(exit_code)
 
 

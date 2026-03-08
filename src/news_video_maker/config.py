@@ -9,11 +9,14 @@ load_dotenv()
 # ディレクトリ
 BASE_DIR = Path(__file__).parent.parent.parent
 CACHE_DIR = BASE_DIR / ".cache"
-PIPELINE_DIR = CACHE_DIR / "pipeline"
 HISTORY_PATH = CACHE_DIR / "history.json"
-AUDIO_DIR = CACHE_DIR / "audio"
-IMAGES_DIR = CACHE_DIR / "images"
 OUTPUT_DIR = BASE_DIR / "output"
+
+# 並列実行対応: PIPELINE_RUN_ID が設定されている場合は実行ごとにディレクトリを分離する
+_run_id = os.getenv("PIPELINE_RUN_ID", "")
+PIPELINE_DIR = CACHE_DIR / "pipeline" / _run_id if _run_id else CACHE_DIR / "pipeline"
+AUDIO_DIR = CACHE_DIR / "audio" / _run_id if _run_id else CACHE_DIR / "audio"
+IMAGES_DIR = CACHE_DIR / "images" / _run_id if _run_id else CACHE_DIR / "images"
 
 # チャンネルブランディング
 CHANNEL_NAME = os.getenv("CHANNEL_NAME", "AIニュース1分解説")

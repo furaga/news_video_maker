@@ -37,13 +37,23 @@ Claude Code CLI
 ### CLI オプション（`scripts/run_pipeline.py`）
 
 ```
-usage: run_pipeline.py [--dry-run] [--skip-upload] [--from-stage STAGE]
+usage: run_pipeline.py [--dry-run] [--skip-upload] [--from-stage STAGE] [--run-id ID]
 
 オプション:
   --dry-run         動画生成まで実行し、YouTube 投稿をスキップ
   --skip-upload     --dry-run の別名
   --from-stage N    ステージ N から再開（1=fetch, 2=process, 3=script, 4=video, 5=upload）
+  --run-id ID       実行ID（省略時は自動生成）。複数同時実行時にキャッシュを分離する
 ```
+
+### 並列実行対応
+
+`--run-id` を指定することで複数のパイプラインを同時に実行できる。
+
+- 実行IDはデフォルトでタイムスタンプ（`YYYYMMDD_HHMMSS`）を自動生成
+- 各実行のキャッシュファイルは `.cache/pipeline/{run_id}/` に格納される
+- 音声・画像キャッシュも `.cache/audio/{run_id}/`, `.cache/images/{run_id}/` に分離される
+- `PIPELINE_RUN_ID` 環境変数で Python ツール群に伝達される
 
 ---
 
