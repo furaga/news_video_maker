@@ -202,34 +202,68 @@ def _chunk_to_html(chunk: str, annotations: dict[str, str] | None = None) -> str
     return result
 
 
+# 助詞（チャンク先頭に来ると不自然な語）
+_PARTICLES = set("はがをにでともへのやか")
+_PARTICLE_MULTI = {"から", "まで", "より", "など", "って", "では", "には", "とは", "ので", "のに", "けど"}
+_MIN_CHUNK_CHARS = 10
+
+
+def _postprocess_chunks(chunks: list[str]) -> list[str]:
+    """助詞で始まるチャンク・短いチャンクを前のチャンクにマージする。"""
+    if len(chunks) <= 1:
+        return chunks
+
+    result: list[str] = []
+    for chunk in chunks:
+        if not result:
+            result.append(chunk)
+            continue
+        stripped = chunk.lstrip()
+        starts_with_particle = stripped and (
+            stripped[0] in _PARTICLES
+            or any(stripped.startswith(p) for p in _PARTICLE_MULTI)
+        )
+        if starts_with_particle or (stripped and len(stripped) < _MIN_CHUNK_CHARS):
+            result[-1] += chunk
+        else:
+            result.append(chunk)
+
+    return result
+
+
 def _split_chunks_ginza(text: str, max_chars: int = 26) -> list[str]:
-    """ginza（spaCy日本語モデル）でトークン化し、トークン単位でチャンク分割する。"""
+    """ginza（spaCy日本語モデル）でトークン化し、トークン単位でチャンク分割する。
+
+    token.idx を使って元テキストからスライスし、空白を正確に保持する。
+    """
     import spacy
     nlp = spacy.load("ja_ginza")
-    doc = nlp(text.strip())
+    text = text.strip()
+    doc = nlp(text)
 
     chunks: list[str] = []
-    current = ""
+    chunk_start = 0
 
     for token in doc:
-        token_text = token.text
-        is_punct = token_text in "。！？、"
+        is_punct = token.text in "。！？、"
+        token_end = token.idx + len(token.text)
 
+        # このトークンを含めると max_chars を超える場合、手前で切る
+        if token_end - chunk_start > max_chars and token.idx > chunk_start:
+            chunks.append(text[chunk_start:token.idx])
+            chunk_start = token.idx
+
+        # 句読点で区切る（自然な区切り点）
         if is_punct:
-            # 句読点は常に現在のチャンクに追加してからflush（孤立した句読点チャンクを防ぐ）
-            current += token_text
-            chunks.append(current)
-            current = ""
-        elif len(current) + len(token_text) > max_chars and current:
-            chunks.append(current)
-            current = token_text
-        else:
-            current += token_text
+            chunks.append(text[chunk_start:token_end])
+            chunk_start = token_end
 
-    if current:
-        chunks.append(current)
+    # 残りのテキスト
+    if chunk_start < len(text):
+        chunks.append(text[chunk_start:])
 
-    return chunks if chunks else [text]
+    chunks = _postprocess_chunks(chunks)
+    return [c for c in chunks if c.strip()] or [text]
 
 
 def _split_chunks_fallback(text: str, max_chars: int = 26) -> list[str]:
@@ -269,6 +303,7 @@ def _split_chunks_fallback(text: str, max_chars: int = 26) -> list[str]:
         if current:
             chunks.append(current)
 
+    chunks = _postprocess_chunks(chunks)
     return chunks if chunks else [text]
 
 
@@ -378,6 +413,11 @@ async def _render_frames_async(
         page = await browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
         await page.set_content(html, wait_until="networkidle")
 
+        # フレーム数を事前計算し、丸め誤差を最終チャンクで吸収
+        total_needed = max(1, round(section_duration * FPS))
+        frame_counts = [max(1, round(d * FPS)) for d in chunk_durations]
+        frame_counts[-1] = max(1, frame_counts[-1] + total_needed - sum(frame_counts))
+
         elapsed = 0.0
         for chunk_idx, (chunk, chunk_dur) in enumerate(zip(subtitle_chunks, chunk_durations)):
             # 字幕テキストを更新（CTAテンプレートは subtitle 要素なし）
@@ -388,7 +428,7 @@ async def _render_frames_async(
                     [chunk_html],
                 )
 
-            n_frames = max(1, round(chunk_dur * FPS))
+            n_frames = frame_counts[chunk_idx]
             for frame_i in range(n_frames):
                 t_in_chunk = frame_i / FPS
                 local_elapsed = elapsed + t_in_chunk
