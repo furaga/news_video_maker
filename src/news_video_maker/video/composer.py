@@ -66,11 +66,12 @@ def _split_display_text(display_text: str, max_chars: int = 26) -> list[str]:
 
 
 def _calc_chunk_durations(chunks: list[str], total_duration: float) -> list[float]:
-    """文字数比で各チャンクの表示時間を配分する"""
-    total_chars = sum(len(c) for c in chunks)
+    """文字数比で各チャンクの表示時間を配分する（マークアップ記号を除いた実文字数で計算）"""
+    clean_lens = [len(re.sub(r'\*\*(.+?)\*\*', r'\1', c)) for c in chunks]
+    total_chars = sum(clean_lens)
     if total_chars == 0:
         return [total_duration / len(chunks)] * len(chunks)
-    return [total_duration * len(c) / total_chars for c in chunks]
+    return [total_duration * cl / total_chars for cl in clean_lens]
 
 logger = logging.getLogger(__name__)
 

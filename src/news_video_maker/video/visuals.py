@@ -57,6 +57,9 @@ _SUBTITLE_TEMPLATE = """\
     word-break: break-all;
     letter-spacing: -1px;
   }}
+  .title-text .kw {{
+    color: #FFE000;
+  }}
   /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px）
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
   .subtitle-area {{
@@ -96,7 +99,7 @@ _SUBTITLE_TEMPLATE = """\
   <div class="bg" id="bg"></div>
   <div class="bg-overlay"></div>
   <div class="title-bar">
-    <div class="title-text">{title}</div>
+    <div class="title-text">{title_html}</div>
   </div>
   <div class="subtitle-area">
     <span class="subtitle-line" id="subtitle">{subtitle_html}</span>
@@ -212,16 +215,16 @@ def _split_chunks_ginza(text: str, max_chars: int = 26) -> list[str]:
         token_text = token.text
         is_punct = token_text in "。！？、"
 
-        if len(current) + len(token_text) > max_chars and current:
+        if is_punct:
+            # 句読点は常に現在のチャンクに追加してからflush（孤立した句読点チャンクを防ぐ）
+            current += token_text
+            chunks.append(current)
+            current = ""
+        elif len(current) + len(token_text) > max_chars and current:
             chunks.append(current)
             current = token_text
         else:
             current += token_text
-
-        # 句読点で区切る（自然な区切り点）
-        if is_punct and current:
-            chunks.append(current)
-            current = ""
 
     if current:
         chunks.append(current)
@@ -453,7 +456,7 @@ def generate_subtitle_clip(
         width=WIDTH,
         height=HEIGHT,
         bg_data_url=bg_data_url or "",
-        title=html_module.escape(title),
+        title_html=_chunk_to_html(title),
         subtitle_html=_chunk_to_html(subtitle_chunks[0] if subtitle_chunks else "", annotations),
     )
 
