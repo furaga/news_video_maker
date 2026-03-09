@@ -38,10 +38,6 @@ _SUBTITLE_TEMPLATE = """\
     transform: scale(1.0);
     transform-origin: center center;
   }}
-  .bg-overlay {{
-    position: absolute; inset: 0;
-    background: rgba(0, 0, 0, 0.30);
-  }}
   /* タイトルバー（上部フルwidth） */
   .title-bar {{
     position: absolute;
@@ -97,7 +93,6 @@ _SUBTITLE_TEMPLATE = """\
 </head>
 <body>
   <div class="bg" id="bg"></div>
-  <div class="bg-overlay"></div>
   <div class="title-bar">
     <div class="title-text">{title_html}</div>
   </div>
@@ -129,10 +124,6 @@ _CTA_TEMPLATE = """\
     transform: scale(1.0);
     transform-origin: center center;
   }}
-  .bg-overlay {{
-    position: absolute; inset: 0;
-    background: rgba(0, 0, 0, 0.40);
-  }}
   .cta-center {{
     position: absolute; inset: 0;
     display: flex; flex-direction: column;
@@ -159,7 +150,6 @@ _CTA_TEMPLATE = """\
 </head>
 <body>
   <div class="bg" id="bg"></div>
-  <div class="bg-overlay"></div>
   <div class="cta-center">
     <div class="cta-emoji">👍🔔</div>
     <div style="text-align: center;">
