@@ -40,6 +40,11 @@ FEEDS = [
 FETCH_HOURS = 24
 MAX_ARTICLES = 30
 
+# 論文フェッチャー
+ARXIV_CATEGORIES = ["cs.AI", "cs.LG", "cs.CV", "cs.RO"]
+PAPER_FETCH_DAYS = 7  # HF Daily Papers は投稿から3-5日遅れで掲載されるため7日をカバー
+MAX_PAPERS = 50
+
 # VOICEVOX
 VOICEVOX_URL = os.getenv("VOICEVOX_URL", "http://localhost:50021")
 VOICEVOX_SPEAKER_ID = 13  # 青山龍星

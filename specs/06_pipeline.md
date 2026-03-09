@@ -2,7 +2,9 @@
 
 ## 目的
 
-5つのステージ（fetch → process → gen-script → gen-video → upload）を Claude Code のカスタムコマンドとして順次実行し、ニュース記事から YouTube 投稿までを自動化する。
+5つのステージ（fetch → process → gen-script → gen-video → upload）を Claude Code のカスタムコマンドとして順次実行し、ニュース記事または最新技術論文から YouTube 投稿までを自動化する。
+
+`--mode` 引数でニュースモード（従来）と論文モード（arXiv + HF Daily Papers）を切り替えられる。
 
 ## 対応コマンド
 
@@ -21,9 +23,18 @@ scripts/run_pipeline.py
   ↓ claude-agent-sdk
 Claude Code CLI
   ↓ .claude/commands/ の各コマンドを順次実行
+
+  --mode news（デフォルト）:
   1. /fetch-news    → .cache/pipeline/01_articles.json
   2. /process       → .cache/pipeline/02_selected.json
   3. /gen-script    → .cache/pipeline/03_script.json
+
+  --mode paper:
+  1. /fetch-papers  → .cache/pipeline/01_papers.json
+  2. /process-paper → .cache/pipeline/02_selected.json（スキーマ共通）
+  3. /gen-script-paper → .cache/pipeline/03_script.json（スキーマ共通）
+
+  共通（mode によらず同一）:
   4. /gen-video     → output/*.mp4 + .cache/pipeline/04_video_path.txt
   5. /upload        → .cache/pipeline/05_youtube_url.txt
 ```
@@ -37,9 +48,10 @@ Claude Code CLI
 ### CLI オプション（`scripts/run_pipeline.py`）
 
 ```
-usage: run_pipeline.py [--dry-run] [--skip-upload] [--from-stage STAGE] [--run-id ID]
+usage: run_pipeline.py [--mode MODE] [--dry-run] [--skip-upload] [--from-stage STAGE] [--run-id ID]
 
 オプション:
+  --mode MODE       実行モード: news（デフォルト）または paper
   --dry-run         動画生成まで実行し、YouTube 投稿をスキップ
   --skip-upload     --dry-run の別名
   --from-stage N    ステージ N から再開（1=fetch, 2=process, 3=script, 4=video, 5=upload）
@@ -61,8 +73,9 @@ usage: run_pipeline.py [--dry-run] [--skip-upload] [--from-stage STAGE] [--run-i
 
 | ファイル | 内容 |
 |---|---|
-| `.cache/pipeline/01_articles.json` | 取得記事一覧 |
-| `.cache/pipeline/02_selected.json` | 選定・要約済み記事 |
+| `.cache/pipeline/01_articles.json` | 取得記事一覧（news モード） |
+| `.cache/pipeline/01_papers.json` | 取得論文一覧（paper モード） |
+| `.cache/pipeline/02_selected.json` | 選定・要約済みコンテンツ（モード共通スキーマ） |
 | `.cache/pipeline/03_script.json` | 台本 |
 | `output/<timestamp>.mp4` | 生成動画 |
 | `.cache/pipeline/04_video_path.txt` | 動画パス |
@@ -101,7 +114,7 @@ usage: run_pipeline.py [--dry-run] [--skip-upload] [--from-stage STAGE] [--run-i
 | `--from-stage` | 必要な入力ファイル |
 |---|---|
 | `1` (fetch) | なし |
-| `2` (process) | `01_articles.json` |
+| `2` (process) | `01_articles.json`（news）または `01_papers.json`（paper） |
 | `3` (script) | `02_selected.json` |
 | `4` (video) | `03_script.json` |
 | `5` (upload) | `04_video_path.txt`, `02_selected.json`, `03_script.json` |

@@ -1,30 +1,43 @@
 # /run-pipeline
 
-ニュース取得から YouTube 投稿まで全ステージを順次実行する。
+ニュース取得または論文取得から YouTube 投稿まで全ステージを順次実行する。
 
 ## 引数
 
+- `--mode news|paper`: 実行モード（デフォルト: `news`）
+  - `news`: 海外テックニュース記事モード（従来動作）
+  - `paper`: 最新技術論文モード（arXiv + HF Daily Papers）
 - `--dry-run` / `--skip-upload`: 動画生成まで実行し、YouTube 投稿をスキップ
 - `--from-stage N`: ステージ N から再開（1=fetch, 2=process, 3=script, 4=video, 5=upload）
 - `--run-id ID`: 実行ID（省略時は自動生成済み）。キャッシュパスは `.cache/pipeline/{run_id}/` になる
 
 ## 実行手順
 
-引数を確認して開始ステージを決定し、各ステージを順次実行する。
+引数を確認して開始ステージと実行モードを決定し、各ステージを順次実行する。
 
 `--run-id` が指定された場合、以下の全ファイルパスの `.cache/pipeline/` を `.cache/pipeline/{run_id}/` に読み替えて実行する。
 
-### ステージ 1: ニュース取得
-`--from-stage` が 1 以下の場合、/fetch-news コマンドを実行:
+### ステージ 1: 取得
+
+**`--mode news`（デフォルト）の場合**、/fetch-news コマンドを実行:
 ```bash
 cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.fetcher.rss
 ```
+完了後、`.cache/pipeline/{run_id}/01_articles.json` を読み込み、配列が空（`[]`）なら「新規記事なし」として後続ステージをスキップし、report.md に「新規記事なし: 処理済み記事のみのため終了」と記録して終了する。
+
+**`--mode paper` の場合**、/fetch-papers コマンドを実行:
+```bash
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.fetcher.paper
+```
+完了後、`.cache/pipeline/{run_id}/01_papers.json` を読み込み、配列が空（`[]`）なら「新規論文なし」として後続ステージをスキップし、report.md に「新規論文なし: 処理済み論文のみのため終了」と記録して終了する。
+
 （`PIPELINE_RUN_ID` 環境変数が設定済みのため、Python側が自動的に正しいディレクトリへ書き込む）
 
-ステージ 1 完了後、`.cache/pipeline/{run_id}/01_articles.json` を読み込み、配列が空（`[]`）なら「新規記事なし」として後続ステージをスキップし、report.md に「新規記事なし: 処理済み記事のみのため終了」と記録して終了する。
+### ステージ 2: 選定・日本語要約
 
-### ステージ 2: 記事選定・日本語要約
 `--from-stage` が 2 以下の場合、以下を実行:
+
+**`--mode news` の場合**: `/process` コマンドと同じ手順を実行する:
 
 1. **過去採用タイトルを取得（ネタ被り防止）**:
    - Bash で `.cache/pipeline/` 以下の全 `02_selected.json` を列挙する:
@@ -44,13 +57,33 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 4. **Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存**
 
+**`--mode paper` の場合**: `/process-paper` コマンドと同じ手順を実行する:
+
+1. **過去採用タイトルを取得（ネタ被り防止）**:
+   - 上記 news モードと同様に `past_titles` を取得する
+
+2. **論文をスコアリングして最良の1件を選定**:
+   - Read ツールで `.cache/pipeline/{run_id}/01_papers.json` を読み込む
+   - 各論文を 1〜10 点でスコアリング（HF 掲載 +2 点、技術的新規性・実用性・分かりやすさを考慮）
+   - `past_titles` との重複は **-3点** ペナルティ
+   - 最高スコアの論文を選定（同点は `hf_upvotes` 多い順 → 新しい順）
+
+3. **日本語タイトル・要約・キーポイントを生成**
+
+4. **Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存**
+
 ### ステージ 3: 台本生成
+
 `--from-stage` が 3 以下の場合、以下を実行:
 - Read ツールで `.cache/pipeline/{run_id}/02_selected.json` を読み込む
-- 30〜60秒の台本を生成（hook/main/outro の3セクション）
+
+**`--mode news` の場合**: `/gen-script` コマンドと同じ手順で台本を生成する。
+**`--mode paper` の場合**: `/gen-script-paper` コマンドと同じ手順で台本を生成する（セクション構成が論文向けに最適化）。
+
 - Write ツールで `.cache/pipeline/{run_id}/03_script.json` に保存
 
 ### ステージ 4: 動画生成
+
 `--from-stage` が 4 以下の場合、以下を実行:
 ```bash
 cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.video.composer
@@ -88,15 +121,16 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 ## 実行ID
 - run_id: {run_id}
+- mode: news / paper
 
 ## 結果: 成功 / 失敗
 
-## 取得記事数
-- 合計: X件
+## 取得件数
+- 合計: X件（news: 記事数 / paper: 論文数）
 
-## 選定記事
+## 選定コンテンツ
 - タイトル: ...
-- ソース: ...
+- ソース: ...（news: techcrunch など / paper: arxiv）
 - スコア: ...
 
 ## 生成動画
