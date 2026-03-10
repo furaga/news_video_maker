@@ -4,7 +4,6 @@ import logging
 import time
 from pathlib import Path
 
-import httplib2
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -79,6 +78,10 @@ def upload_video(
         },
         "status": {
             "privacyStatus": privacy,
+            "selfDeclaredMadeForKids": False,  # 子供向けではない
+            # containsSyntheticMedia: 改変・AI生成コンテンツの開示（YouTube Data API v3 の新フィールド）
+            # API がサポートしていない場合は無視される。YouTube Studio での確認を推奨。
+            "containsSyntheticMedia": False,
         },
     }
 
@@ -142,10 +145,11 @@ def main():
     selected = json.loads(selected_path.read_text(encoding="utf-8"))
     script = json.loads(script_path.read_text(encoding="utf-8"))
 
-    title = script.get("title", selected.get("japanese_title", "テックニュース"))
+    # title の **keyword** マークアップ（動画表示専用）を除去
+    raw_title = script.get("title", selected.get("japanese_title", "テックニュース"))
+    title = raw_title.replace("**", "")
     source = selected.get("source", "")
     source_url = selected.get("url", "")
-    summary = selected.get("japanese_summary", "")
 
     # 05_metadata.json があれば優先使用、なければフォールバック
     metadata_path = PIPELINE_DIR / "05_metadata.json"
@@ -160,7 +164,6 @@ def main():
     except Exception as e:
         logger.warning("メタデータ読み込み失敗。フォールバックを使用します: %s", e)
         description = (
-            f"{summary}\n\n"
             f"元記事: {source_url}\n\n"
             "---\n"
             f"{CHANNEL_DESCRIPTION_FOOTER}\n\n"
