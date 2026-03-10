@@ -1,10 +1,23 @@
 """パイプライン実行エントリーポイント"""
 import argparse
 import sys
+from datetime import datetime, timedelta, timezone
 
 import anyio
 
 from news_video_maker.pipeline import run
+
+_JST = timezone(timedelta(hours=9))
+
+
+def _parse_publish_at(publish_time: str) -> str:
+    """HH:MM (JST) を翌日同時刻の ISO 8601 UTC 文字列に変換"""
+    hour, minute = map(int, publish_time.split(":"))
+    now_jst = datetime.now(_JST)
+    tomorrow_jst = (now_jst + timedelta(days=1)).replace(
+        hour=hour, minute=minute, second=0, microsecond=0
+    )
+    return tomorrow_jst.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def main():
@@ -30,9 +43,16 @@ def main():
         default="",
         help="実行ID（省略時は自動生成。複数同時実行時に明示指定するとキャッシュが分離される）",
     )
+    parser.add_argument(
+        "--publish-time",
+        default="",
+        metavar="HH:MM",
+        help="YouTube 公開スケジュール時刻（JST）。例: 8:00 → 翌日 08:00 JST に公開予約",
+    )
     args = parser.parse_args()
 
-    exit_code = anyio.run(run, args.dry_run, args.from_stage, args.run_id)
+    publish_at = _parse_publish_at(args.publish_time) if args.publish_time else ""
+    exit_code = anyio.run(run, args.dry_run, args.from_stage, args.run_id, publish_at)
     sys.exit(exit_code)
 
 

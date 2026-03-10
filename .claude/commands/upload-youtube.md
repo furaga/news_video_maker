@@ -11,11 +11,13 @@
 
 ### ステップ2: YouTube アップロード（Python実行）
 
-Bash ツールで以下を実行:
+Bash ツールで以下を実行（`--publish-at` は省略可能）:
 
 ```bash
-cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.uploader.youtube
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.uploader.youtube [--publish-at YYYY-MM-DDTHH:MM:SSZ]
 ```
+
+`--publish-at` を指定した場合、動画は `private` でアップロードされ、指定日時（UTC）に自動公開される。
 
 実行後、YouTube URL を報告する。
 

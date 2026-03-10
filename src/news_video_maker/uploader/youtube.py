@@ -61,12 +61,31 @@ def upload_video(
     description: str,
     tags: list[str],
     privacy: str = YOUTUBE_PRIVACY,
+    publish_at: str | None = None,
 ) -> str:
-    """動画をアップロードして YouTube URL を返す"""
+    """動画をアップロードして YouTube URL を返す。
+
+    publish_at: ISO 8601 UTC 文字列（例: "2026-03-12T23:00:00Z"）を指定すると
+    スケジュール公開になる。YouTube API の仕様上、privacy は自動的に "private" に設定される。
+    """
     if not video_path.exists():
         raise FileNotFoundError(f"動画ファイルが見つかりません: {video_path}")
 
     youtube = _authenticate()
+
+    # スケジュール公開時は private が必須（YouTube API 仕様）
+    effective_privacy = "private" if publish_at else privacy
+
+    status_body: dict = {
+        "privacyStatus": effective_privacy,
+        "selfDeclaredMadeForKids": False,  # 子供向けではない
+        # containsSyntheticMedia: 改変・AI生成コンテンツの開示（YouTube Data API v3 の新フィールド）
+        # API がサポートしていない場合は無視される。YouTube Studio での確認を推奨。
+        "containsSyntheticMedia": False,
+    }
+    if publish_at:
+        status_body["publishAt"] = publish_at
+        logger.info("スケジュール公開設定: %s (UTC)", publish_at)
 
     body = {
         "snippet": {
@@ -76,13 +95,7 @@ def upload_video(
             "categoryId": "28",  # Science & Technology
             "defaultLanguage": "ja",
         },
-        "status": {
-            "privacyStatus": privacy,
-            "selfDeclaredMadeForKids": False,  # 子供向けではない
-            # containsSyntheticMedia: 改変・AI生成コンテンツの開示（YouTube Data API v3 の新フィールド）
-            # API がサポートしていない場合は無視される。YouTube Studio での確認を推奨。
-            "containsSyntheticMedia": False,
-        },
+        "status": status_body,
     }
 
     media = MediaFileUpload(
@@ -130,7 +143,19 @@ def upload_video(
 
 
 def main():
+    import argparse
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    parser = argparse.ArgumentParser(description="YouTube 動画アップロード")
+    parser.add_argument(
+        "--publish-at",
+        default="",
+        metavar="ISO8601",
+        help="スケジュール公開時刻（UTC ISO 8601）。例: 2026-03-12T23:00:00Z",
+    )
+    args = parser.parse_args()
+    publish_at = args.publish_at or None
 
     # 入力ファイル読み込み
     path_file = PIPELINE_DIR / "04_video_path.txt"
@@ -171,7 +196,7 @@ def main():
         )
         tags = [t.lstrip("#") for t in CHANNEL_HASHTAGS.split()] + [source]
 
-    url = upload_video(video_path, title, description, tags)
+    url = upload_video(video_path, title, description, tags, publish_at=publish_at)
 
     # URL保存
     url_file = PIPELINE_DIR / "05_youtube_url.txt"
