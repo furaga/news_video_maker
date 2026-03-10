@@ -1,6 +1,9 @@
 """Claude Agent SDK を使ったパイプライン実行オーケストレーター"""
 import os
+import sys
 from datetime import datetime
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import anyio
 from claude_agent_sdk import (
