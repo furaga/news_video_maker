@@ -10,8 +10,9 @@ from pathlib import Path
 
 from moviepy import AudioFileClip, concatenate_videoclips
 
-from news_video_maker.config import AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, PIPELINE_DIR
+from news_video_maker.config import AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, PIPELINE_DIR, VIDEO_BG_MODE
 from news_video_maker.video.background import generate_background_images
+from news_video_maker.video.background_video import generate_background_video_frames
 from news_video_maker.video.tts import synthesize
 from news_video_maker.video.visuals import (
     generate_cta_clip,
@@ -227,22 +228,38 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     section_bg_prompts = [s.bg_prompt for s in all_sections]
     custom_prompts = section_bg_prompts if any(section_bg_prompts) else None
 
-    # AI生成背景画像（全セクション共通のフォールバック兼、hookセクション以外用）
-    bg_list: list[str] = []
-    ai_bg_results = generate_background_images(
-        article_title_en,
-        key_points,
-        num_ai_images,
-        IMAGES_DIR,
-        custom_prompts=custom_prompts,
-    )
-    for bg_path, _ in ai_bg_results:
-        bg_list.append(_path_to_data_url(bg_path))
+    # 背景生成: VIDEO_BG_MODE=1 なら AnimateDiff 動画フレーム、通常は静止画
+    bg_list: list[str] = []  # 静止画モード用 (base64 data URL per section)
+    bg_video_frames: list[list[str]] | None = None  # 動画モード用 (frames per section)
 
-    # AI生成に失敗した場合、hookスクリーンショットを全セクションで使い回す
-    if not bg_list:
-        fallback = hook_bg_data_url or ""
-        bg_list = [fallback] * num_ai_images
+    if VIDEO_BG_MODE:
+        logger.info("VIDEO_BG_MODE=1: AnimateDiff で背景動画フレームを生成します")
+        bg_video_frames = generate_background_video_frames(
+            article_title_en,
+            key_points,
+            num_ai_images,
+            IMAGES_DIR,
+            section_durations=durations,
+            custom_prompts=custom_prompts,
+        )
+        if bg_video_frames is None:
+            logger.warning("背景動画生成に失敗。静止画モードにフォールバックします")
+
+    if bg_video_frames is None:
+        # 静止画モード（通常 or 動画生成失敗時フォールバック）
+        ai_bg_results = generate_background_images(
+            article_title_en,
+            key_points,
+            num_ai_images,
+            IMAGES_DIR,
+            custom_prompts=custom_prompts,
+        )
+        for bg_path, _ in ai_bg_results:
+            bg_list.append(_path_to_data_url(bg_path))
+
+        if not bg_list:
+            fallback = hook_bg_data_url or ""
+            bg_list = [fallback] * num_ai_images
 
     # hookセクションのbg: スクリーンショット優先、なければAI生成の最初の1枚
     if not hook_bg_data_url and bg_list:
@@ -256,10 +273,16 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         wav_path = wav_paths[i]
         duration = durations[i]
 
-        # セクションに対応する背景画像を選択
-        if section.type == "hook" and hook_bg_data_url:
+        # セクションに対応する背景を選択
+        if bg_video_frames is not None:
+            # 動画モード: セクション対応のフレームリストを使用
+            sec_frames = bg_video_frames[i % len(bg_video_frames)]
+            bg_data_url = ""
+        elif section.type == "hook" and hook_bg_data_url:
+            sec_frames = None
             bg_data_url = hook_bg_data_url
         else:
+            sec_frames = None
             bg_idx = i % len(bg_list)
             bg_data_url = bg_list[bg_idx]
 
@@ -297,6 +320,7 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             section_start=section_start,
             total_duration=total_duration,
             annotations=section.annotations or None,
+            bg_frames=sec_frames,
         )
         video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)

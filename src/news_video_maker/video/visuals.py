@@ -384,11 +384,13 @@ async def _render_frames_async(
     total_duration: float,
     is_cta: bool = False,
     annotations: dict[str, str] | None = None,
+    bg_frames: list[str] | None = None,
 ) -> list[np.ndarray]:
     """Playwright でフレームをレンダリングする。
 
     Ken Burns 効果: セクションローカル時間で scale 1.0→1.20 ＋ ゆっくりパン。
     パン方向: section_start が偶数秒帯なら右パン (+1)、奇数秒帯なら左パン (-1)。
+    bg_frames が指定された場合、フレームごとに背景画像を切り替える（動画背景モード）。
     """
     from playwright.async_api import async_playwright
 
@@ -422,6 +424,16 @@ async def _render_frames_async(
             for frame_i in range(n_frames):
                 t_in_chunk = frame_i / FPS
                 local_elapsed = elapsed + t_in_chunk
+
+                # 動画背景モード: フレームインデックスに対応する背景に切り替え
+                if bg_frames:
+                    frame_idx = len(frames)
+                    bg_url = bg_frames[frame_idx % len(bg_frames)]
+                    await page.evaluate(
+                        "([url]) => { const el = document.getElementById('bg'); "
+                        "if (el) el.style.backgroundImage = 'url(' + url + ')'; }",
+                        [bg_url],
+                    )
 
                 await page.evaluate(
                     """([localElapsed, sectionDuration, panDir]) => {
@@ -457,10 +469,12 @@ def _render_frames(
     total_duration: float = 60.0,
     is_cta: bool = False,
     annotations: dict[str, str] | None = None,
+    bg_frames: list[str] | None = None,
 ) -> list[np.ndarray]:
     """同期ラッパー"""
     return asyncio.run(_render_frames_async(
-        html, subtitle_chunks, chunk_durations, section_start, total_duration, is_cta, annotations
+        html, subtitle_chunks, chunk_durations, section_start, total_duration,
+        is_cta, annotations, bg_frames,
     ))
 
 
@@ -475,12 +489,14 @@ def generate_subtitle_clip(
     section_start: float = 0.0,
     total_duration: float = 60.0,
     annotations: dict[str, str] | None = None,
+    bg_frames: list[str] | None = None,
 ) -> VideoClip:
     """字幕スタイルの VideoClip を返す。
 
     subtitle_chunks: 表示する字幕テキストのリスト（**keyword** マークアップ対応）
     chunk_durations: 各チャンクの表示時間（秒）
     annotations: キーワードの注釈辞書（ruby テキストとして表示）
+    bg_frames: 動画背景モード用フレームリスト（指定時は bg_data_url の代わりに使用）
     """
     html = _SUBTITLE_TEMPLATE.format(
         width=WIDTH,
@@ -491,7 +507,10 @@ def generate_subtitle_clip(
     )
 
     logger.info("字幕クリップレンダリング開始: %d チャンク, %.1fs", len(subtitle_chunks), duration)
-    rendered = _render_frames(html, subtitle_chunks, chunk_durations, section_start, total_duration, annotations=annotations)
+    rendered = _render_frames(
+        html, subtitle_chunks, chunk_durations, section_start, total_duration,
+        annotations=annotations, bg_frames=bg_frames,
+    )
 
     def make_frame(t: float) -> np.ndarray:
         idx = min(int(t * FPS), len(rendered) - 1)
