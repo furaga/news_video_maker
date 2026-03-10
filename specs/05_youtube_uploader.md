@@ -56,47 +56,40 @@ YouTube Data API v3 は OAuth 2.0 で認証する。
 
 | フィールド | 値 |
 |---|---|
-| タイトル | `03_script.json` の `title`（最大 100 文字） |
+| タイトル | `03_script.json` の `title` から `**` マークアップを除去（最大 100 文字） |
 | 説明文 | `05_metadata.json` の `description`（なければフォールバックテンプレート） |
 | タグ | `05_metadata.json` の `tags`（なければハードコードリスト） |
 | カテゴリ ID | `28`（Science & Technology） |
-| プライバシー | 設定値（デフォルト: `unlisted`） |
+| プライバシー | 設定値（デフォルト: `public`） |
 | 字幕言語 | `ja` |
+| 子供向けコンテンツ | `selfDeclaredMadeForKids: false`（いいえ） |
+| 改変・合成コンテンツ | `containsSyntheticMedia: false`（いいえ） |
 
 ### 説明文（LLM生成・`05_metadata.json` の `description`）
 
 `/upload` コマンドのLLMステップが以下の構成で生成する:
 
 ```
-{記事の核心を端的に表す文（50文字以内）}
-
-・{key_points[0]}
-・{key_points[1]}
-・{key_points[2]}
-
-{related_research から最も興味深い補足情報1文}
-
 元記事: {source_url}
 
 ---
 このチャンネルでは海外テックニュースを日本語で毎日お届けします。
 
-#テックニュース #テクノロジー #ShortNews #Shorts
+#テックニュース #テクノロジー #AI #ShortNews #Shorts #{記事固有タグ1} #{記事固有タグ2} ...
 ```
 
-合計500文字以内。`key_points` が空の場合はその行をスキップ。
+- 記事の要約・key_points は含めない（シンプルな形式）
+- ハッシュタグは `tags` 配列の全要素を `#` 付きで並べる（固定タグを先頭に）
 
 ### 説明文フォールバックテンプレート（`05_metadata.json` が存在しない場合）
 
 ```
-{japanese_summary}
-
 元記事: {source_url}
 
 ---
-このチャンネルでは海外テックニュースを日本語で毎日お届けします。
+{CHANNEL_DESCRIPTION_FOOTER}
 
-#テックニュース #テクノロジー #ShortNews
+{CHANNEL_HASHTAGS}
 ```
 
 ### YouTube Shorts として認識させる条件
