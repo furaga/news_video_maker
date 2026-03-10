@@ -45,6 +45,9 @@ ARXIV_CATEGORIES = ["cs.AI", "cs.LG", "cs.CV", "cs.RO"]
 PAPER_FETCH_DAYS = 7  # HF Daily Papers は投稿から3-5日遅れで掲載されるため7日をカバー
 MAX_PAPERS = 50
 
+# 背景画像生成モデル（SD 1.5 互換 fine-tune モデルを指定可能）
+SD_MODEL_ID = os.getenv("SD_MODEL_ID", "Lykon/dreamshaper-8")
+
 # VOICEVOX
 VOICEVOX_URL = os.getenv("VOICEVOX_URL", "http://localhost:50021")
 VOICEVOX_SPEAKER_ID = 13  # 青山龍星
