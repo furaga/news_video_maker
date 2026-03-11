@@ -10,6 +10,7 @@
 - `--dry-run` / `--skip-upload`: 動画生成まで実行し、YouTube 投稿をスキップ
 - `--from-stage N`: ステージ N から再開（1=fetch, 2=process, 3=script, 4=video, 5=upload）
 - `--run-id ID`: 実行ID（省略時は自動生成済み）。キャッシュパスは `.cache/pipeline/{run_id}/` になる
+- `--publish-at ISO8601`: YouTube 公開スケジュール時刻（UTC ISO 8601 形式）。例: `2026-03-12T23:00:00Z`
 
 ## 実行手順
 
@@ -121,6 +122,12 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 1. **メタデータ生成**: `/gen-metadata` コマンドと同じ手順を実行し `.cache/pipeline/{run_id}/05_metadata.json` に保存
 
 2. **YouTube アップロード（Python実行）**:
+
+   `--publish-at` が指定されている場合:
+   ```bash
+   cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.uploader.youtube --publish-at {publish_at}
+   ```
+   指定されていない場合:
    ```bash
    cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.uploader.youtube
    ```
