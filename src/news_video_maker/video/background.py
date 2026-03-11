@@ -1,4 +1,4 @@
-"""Stable Diffusion (SD 1.5) によるローカル背景画像生成"""
+"""Stable Diffusion による背景画像生成"""
 import json
 import logging
 from pathlib import Path
@@ -6,12 +6,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 OUTPUT_SIZE = (1080, 1920)
-MODEL_ID = "runwayml/stable-diffusion-v1-5"
 
 _NEGATIVE_PROMPT = (
-    "text, watermark, logo, signature, people, face, body parts, "
-    "ugly, blurry, low quality, distorted, deformed, artifacts, "
-    "cartoon, anime, painting, sketch"
+    "text, watermark, logo, signature, people, face, hands, body parts, "
+    "ugly, blurry, low quality, distorted, deformed, mutated, extra limbs, "
+    "artifacts, cartoon, anime, painting, sketch, nsfw, oversaturated"
 )
 
 
@@ -24,13 +23,18 @@ def _build_prompt(article_title: str, keyword: str) -> tuple[str, str]:
     return prompt, _NEGATIVE_PROMPT
 
 
-def _load_sd_pipeline(device: str, dtype):
-    from diffusers import StableDiffusionPipeline
+def _load_sd_pipeline(model_id: str, device: str, dtype):
+    from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
 
     pipe = StableDiffusionPipeline.from_pretrained(
-        MODEL_ID,
+        model_id,
         torch_dtype=dtype,
         safety_checker=None,
+    )
+    pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+        pipe.scheduler.config,
+        algorithm_type="dpmsolver++",
+        use_karras_sigmas=True,
     )
     pipe.enable_attention_slicing()
     pipe = pipe.to(device)
@@ -61,6 +65,8 @@ def generate_background_images(
             "インストール: uv add diffusers transformers accelerate"
         )
         return []
+
+    from news_video_maker.config import SD_MODEL_ID
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
@@ -93,8 +99,8 @@ def generate_background_images(
         return results
 
     try:
-        logger.info("Stable Diffusion モデルを読み込み中: %s", MODEL_ID)
-        pipe = _load_sd_pipeline(device, dtype)
+        logger.info("Stable Diffusion モデルを読み込み中: %s", SD_MODEL_ID)
+        pipe = _load_sd_pipeline(SD_MODEL_ID, device, dtype)
 
         for i in range(num_images):
             out_path = output_dir / f"bg_{i:02d}.png"
@@ -112,10 +118,10 @@ def generate_background_images(
             image = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
-                height=1024,
-                width=576,
-                num_inference_steps=40,
-                guidance_scale=12.0,
+                height=896,
+                width=512,
+                num_inference_steps=30,
+                guidance_scale=7.5,
             ).images[0]
 
             image = image.resize(OUTPUT_SIZE, Image.LANCZOS)
