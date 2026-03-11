@@ -14,7 +14,8 @@ _ANIMATE_FPS = 8       # AnimateDiff 生成 fps
 
 _NEGATIVE_PROMPT = (
     "text, watermark, logo, people, face, hands, ugly, blurry, "
-    "low quality, distorted, deformed, artifacts, nsfw, oversaturated"
+    "low quality, distorted, deformed, artifacts, nsfw, oversaturated, "
+    "flickering, color shift, noise, grain, inconsistent lighting"
 )
 
 
@@ -72,11 +73,18 @@ def generate_background_video_frames(
             "AnimateDiff パイプラインを読み込み中: adapter=%s, base=%s",
             _ANIMATEDIFF_ADAPTER, SD_MODEL_ID,
         )
+        from diffusers import DPMSolverMultistepScheduler
+
         adapter = MotionAdapter.from_pretrained(_ANIMATEDIFF_ADAPTER, torch_dtype=dtype)
         pipe = AnimateDiffPipeline.from_pretrained(
             SD_MODEL_ID,
             motion_adapter=adapter,
             torch_dtype=dtype,
+        )
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            pipe.scheduler.config,
+            algorithm_type="dpmsolver++",
+            use_karras_sigmas=True,
         )
         pipe.enable_attention_slicing()
         pipe = pipe.to(device)
@@ -101,11 +109,11 @@ def generate_background_video_frames(
             output = pipe(
                 prompt=prompt,
                 negative_prompt=_NEGATIVE_PROMPT,
-                num_inference_steps=20,
-                guidance_scale=7.5,
+                num_inference_steps=25,
+                guidance_scale=6.0,
                 num_frames=_ANIMATE_FRAMES,
-                height=512,
-                width=288,
+                height=576,
+                width=320,
             )
             raw_frames: list = output.frames[0]  # list[PIL.Image]
 
