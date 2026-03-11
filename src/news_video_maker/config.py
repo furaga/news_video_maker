@@ -45,6 +45,9 @@ ARXIV_CATEGORIES = ["cs.AI", "cs.LG", "cs.CV", "cs.RO"]
 PAPER_FETCH_DAYS = 7  # HF Daily Papers は投稿から3-5日遅れで掲載されるため7日をカバー
 MAX_PAPERS = 50
 
+# 背景画像生成モデル
+SD_MODEL_ID = os.getenv("SD_MODEL_ID", "Lykon/dreamshaper-8")
+
 # 背景動画モード（VIDEO_BG_MODE=1 で AnimateDiff による動画背景を使用）
 VIDEO_BG_MODE = os.getenv("VIDEO_BG_MODE", "0") == "1"
 
