@@ -33,7 +33,7 @@ def _summarize_tool_input(name: str, inp: dict) -> str:
     return str(inp)[:60]
 
 
-async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publish_at: str = "") -> int:
+async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publish_at: str = "", mode: str = "news") -> int:
     """パイプラインを実行して終了コードを返す"""
     # 実行IDを生成してキャッシュディレクトリを分離（並列実行対応）
     if not run_id:
@@ -47,6 +47,8 @@ async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publ
         args_parts.append("--dry-run")
     if publish_at:
         args_parts.append(f"--publish-at {publish_at}")
+    if mode and mode != "news":
+        args_parts.append(f"--mode {mode}")
     prompt = f"/run-pipeline {' '.join(args_parts)}".strip()
 
     now = datetime.now()
@@ -65,7 +67,7 @@ async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publ
     exit_code = 0
     log_file = open(log_path, "w", encoding="utf-8", buffering=1)
     try:
-        _log(f"=== パイプライン開始 run_id={run_id} from_stage={from_stage} dry_run={dry_run} publish_at={publish_at} ===", log_file)
+        _log(f"=== パイプライン開始 run_id={run_id} from_stage={from_stage} dry_run={dry_run} publish_at={publish_at} mode={mode} ===", log_file)
         _log(f"ログ: {log_path}", log_file)
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, AssistantMessage):

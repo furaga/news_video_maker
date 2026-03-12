@@ -1,5 +1,6 @@
 """VOICEVOX HTTP API クライアント"""
 import logging
+import subprocess
 import time
 from pathlib import Path
 
@@ -12,9 +13,46 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 RETRY_WAIT = 1.0
 
+VOICEVOX_EXE = r"C:\Users\furag\AppData\Local\Programs\VOICEVOX\VOICEVOX.exe"
+VOICEVOX_STARTUP_TIMEOUT = 60   # seconds
+VOICEVOX_STARTUP_POLL = 2       # seconds
+
+
+def _ensure_voicevox_running() -> None:
+    """VOICEVOXが起動していなければ自動起動し、準備完了を待つ"""
+    try:
+        r = httpx.get(f"{VOICEVOX_URL}/version", timeout=2)
+        if r.status_code == 200:
+            return  # already running
+    except Exception:
+        pass
+
+    logger.info("VOICEVOXが起動していません。自動起動します: %s", VOICEVOX_EXE)
+    subprocess.Popen(
+        [VOICEVOX_EXE],
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+
+    deadline = time.monotonic() + VOICEVOX_STARTUP_TIMEOUT
+    while time.monotonic() < deadline:
+        time.sleep(VOICEVOX_STARTUP_POLL)
+        try:
+            r = httpx.get(f"{VOICEVOX_URL}/version", timeout=2)
+            if r.status_code == 200:
+                logger.info("VOICEVOX起動完了")
+                return
+        except Exception:
+            pass
+
+    raise RuntimeError(
+        f"VOICEVOXが{VOICEVOX_STARTUP_TIMEOUT}秒以内に起動しませんでした。"
+        "手動で起動してから再試行してください。"
+    )
+
 
 def synthesize(text: str, output_path: Path, speaker_id: int = VOICEVOX_SPEAKER_ID) -> Path:
     """テキストを音声合成してWAVファイルに保存する"""
+    _ensure_voicevox_running()
     for attempt in range(MAX_RETRIES):
         try:
             # audio_query を生成
@@ -41,11 +79,6 @@ def synthesize(text: str, output_path: Path, speaker_id: int = VOICEVOX_SPEAKER_
             logger.info("音声合成完了: %s", output_path)
             return output_path
 
-        except httpx.ConnectError:
-            raise RuntimeError(
-                f"VOICEVOXに接続できません ({VOICEVOX_URL})。"
-                "VOICEVOXが起動しているか確認してください。"
-            )
         except Exception as e:
             if attempt < MAX_RETRIES - 1:
                 logger.warning("音声合成失敗（%d/%d回目）: %s", attempt + 1, MAX_RETRIES, e)
