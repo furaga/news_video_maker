@@ -19,7 +19,23 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 `--publish-at` を指定した場合、動画は `private` でアップロードされ、指定日時（UTC）に自動公開される。
 
-実行後、YouTube URL を報告する。
+実行後、YouTube URL（例: `https://youtu.be/VIDEO_ID`）を記録する。
+
+### ステップ3: 投稿者コメント投稿
+
+アップロード成功後、即時に投稿者コメントを投稿する。
+
+1. `.cache/youtube_comments.md` を Read ツールで読み込み、該当動画のエントリの URL が `（未アップロード）` になっている場合は Edit ツールで実際の YouTube URL に書き換える。
+
+2. 以下を実行してコメントを投稿する（`VIDEO_ID` はアップロード結果から取得した値）:
+
+```bash
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id VIDEO_ID
+```
+
+> **仕組み**: 非公開・スケジュール公開動画は一時的に限定公開→コメント投稿→元の状態（非公開 or スケジュール）に自動復元される。
+
+実行結果（コメントID or エラー）を報告する。
 
 ## 前提条件
 
