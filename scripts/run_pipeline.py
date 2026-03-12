@@ -49,10 +49,27 @@ def main():
         metavar="HH:MM",
         help="YouTube 公開スケジュール時刻（JST）。例: 8:00 → 翌日 08:00 JST に公開予約",
     )
+    parser.add_argument(
+        "--publish-at",
+        default="",
+        metavar="ISO8601",
+        help="YouTube スケジュール公開時刻（UTC ISO 8601）。例: 2026-03-13T23:00:00Z。--publish-time より優先される。",
+    )
+    parser.add_argument(
+        "--mode",
+        default="news",
+        choices=["news", "paper"],
+        help="実行モード: news（デフォルト）または paper",
+    )
     args = parser.parse_args()
 
-    publish_at = _parse_publish_at(args.publish_time) if args.publish_time else ""
-    exit_code = anyio.run(run, args.dry_run, args.from_stage, args.run_id, publish_at)
+    if args.publish_at:
+        publish_at = args.publish_at
+    elif args.publish_time:
+        publish_at = _parse_publish_at(args.publish_time)
+    else:
+        publish_at = ""
+    exit_code = anyio.run(run, args.dry_run, args.from_stage, args.run_id, publish_at, args.mode)
     sys.exit(exit_code)
 
 
