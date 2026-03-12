@@ -45,6 +45,14 @@ ARXIV_CATEGORIES = ["cs.AI", "cs.LG", "cs.CV", "cs.RO"]
 PAPER_FETCH_DAYS = 7  # HF Daily Papers は投稿から3-5日遅れで掲載されるため7日をカバー
 MAX_PAPERS = 50
 
+# 雑学フェッチャー (OpenTDB)
+TRIVIA_CATEGORIES = [17, 20, 22, 23, 27]  # Science&Nature, Mythology, Geography, History, Animals
+TRIVIA_FETCH_PER_CATEGORY = 10
+
+# 宇宙フェッチャー (NASA APOD)
+NASA_API_KEY = os.getenv("NASA_API_KEY", "DEMO_KEY")
+SPACE_FETCH_DAYS = 7
+
 # 背景画像生成モデル（SD 1.5 互換 fine-tune モデルを指定可能）
 SD_MODEL_ID = os.getenv("SD_MODEL_ID", "Lykon/dreamshaper-8")
 
