@@ -79,7 +79,8 @@ URL: https://youtu.be/{video_id}
 ---
 ```
 
-追記前に `.cache/youtube_comments.md` を Read ツールで読み込み、同じ URL がすでに存在する場合は追記しない（重複防止）。
+- `{video_id}` がまだ不明な場合（アップロード前）は `URL: （未アップロード）` と記載する。アップロード後に `/upload` コマンドが実際の URL に書き換える。
+- 追記前に `.cache/youtube_comments.md` を Read ツールで読み込み、同じタイトルまたは URL がすでに存在する場合は追記しない（重複防止）。
 
 ## 前提条件
 

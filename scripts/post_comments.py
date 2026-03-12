@@ -6,8 +6,9 @@
 非公開・スケジュール動画を一時的に限定公開→コメント投稿→元の状態に戻す。
 
 使い方:
-    uv run python scripts/post_comments.py
-    uv run python scripts/post_comments.py --dry-run  # 投稿せず確認のみ
+    uv run python scripts/post_comments.py                        # 全件
+    uv run python scripts/post_comments.py --video-id VIDEO_ID   # 1件指定
+    uv run python scripts/post_comments.py --dry-run              # 投稿せず確認のみ
 """
 import argparse
 import logging
@@ -140,6 +141,7 @@ def post_comment(youtube, video_id: str, text: str) -> str:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="投稿せず確認のみ")
+    parser.add_argument("--video-id", help="対象動画IDを1件指定（省略時は全件）")
     args = parser.parse_args()
 
     if not COMMENTS_FILE.exists():
@@ -150,6 +152,12 @@ def main():
     if not comments:
         print("コメント対象の動画が見つかりません。")
         return
+
+    if args.video_id:
+        comments = [(vid, text) for vid, text in comments if vid == args.video_id]
+        if not comments:
+            print(f"指定された動画IDのコメントが見つかりません: {args.video_id}")
+            return
 
     youtube = authenticate()
 
