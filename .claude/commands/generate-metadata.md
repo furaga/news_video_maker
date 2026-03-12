@@ -67,7 +67,19 @@ JSONが正しく生成できない場合は最大1回再試行する。
 
 ### 保存
 
-Write ツールで `.cache/pipeline/05_comment.txt` にプレーンテキストで保存する。
+`.cache/youtube_comments.md`（プロジェクトルート直下の `.cache/`）に以下の形式で追記する。ファイルが存在しない場合は新規作成する。
+
+```markdown
+## {動画タイトル（**マークアップなし**）}
+URL: https://youtu.be/{video_id}
+生成日: YYYY-MM-DD
+
+{コメント本文}
+
+---
+```
+
+追記前に `.cache/youtube_comments.md` を Read ツールで読み込み、同じ URL がすでに存在する場合は追記しない（重複防止）。
 
 ## 前提条件
 
