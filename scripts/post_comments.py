@@ -6,15 +6,13 @@
 非公開・スケジュール動画を一時的に限定公開→コメント投稿→元の状態に戻す。
 
 使い方:
-    uv run python scripts/post_comments.py                        # 全件
-    uv run python scripts/post_comments.py --video-id VIDEO_ID   # 1件指定
-    uv run python scripts/post_comments.py --dry-run              # 投稿せず確認のみ
+    uv run python scripts/post_comments.py --video-id VIDEO_ID           # 投稿
+    uv run python scripts/post_comments.py --video-id VIDEO_ID --dry-run # 確認のみ
 """
 import argparse
 import logging
 import os
 import re
-import time
 from pathlib import Path
 
 import google.auth.transport.requests
@@ -141,7 +139,7 @@ def post_comment(youtube, video_id: str, text: str) -> str:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="投稿せず確認のみ")
-    parser.add_argument("--video-id", help="対象動画IDを1件指定（省略時は全件）")
+    parser.add_argument("--video-id", required=True, help="対象動画ID（必須）")
     args = parser.parse_args()
 
     if not COMMENTS_FILE.exists():
@@ -149,70 +147,40 @@ def main():
         return
 
     comments = parse_comments_file(COMMENTS_FILE)
+    comments = [(vid, text) for vid, text in comments if vid == args.video_id]
     if not comments:
-        print("コメント対象の動画が見つかりません。")
+        print(f"指定された動画IDのコメントが見つかりません: {args.video_id}")
         return
-
-    if args.video_id:
-        comments = [(vid, text) for vid, text in comments if vid == args.video_id]
-        if not comments:
-            print(f"指定された動画IDのコメントが見つかりません: {args.video_id}")
-            return
 
     youtube = authenticate()
 
-    all_video_ids = [vid for vid, _ in comments]
-    status_map = get_video_status(youtube, all_video_ids)
+    video_id, text = comments[0]
+    url = f"https://youtu.be/{video_id}"
+    s = get_video_status(youtube, [video_id]).get(video_id, {})
+    privacy = s.get("privacyStatus")
+    publish_at = s.get("publishAt")
+    label = f"スケジュール({publish_at})" if publish_at else privacy or "不明"
 
-    # 非公開・スケジュールのみ対象
-    targets = []
-    skipped = []
-    for vid, text in comments:
-        s = status_map.get(vid, {})
-        privacy = s.get("privacyStatus")
-        if privacy == "private":
-            targets.append((vid, text, s.get("publishAt")))
-        else:
-            skipped.append((vid, privacy or "不明"))
-
-    print(f"対象（非公開・スケジュール）: {len(targets)} 件 / スキップ: {len(skipped)} 件\n")
-    for vid, reason in skipped:
-        print(f"  スキップ: https://youtu.be/{vid} ({reason})")
+    if privacy != "private":
+        print(f"スキップ: {url} ({privacy}) — 非公開・スケジュール動画のみ対象")
+        return
 
     if args.dry_run:
-        print(f"\n=== DRY RUN: {len(targets)} 件を投稿予定 ===")
-        for vid, text, publish_at in targets:
-            label = f"スケジュール({publish_at})" if publish_at else "非公開"
-            print(f"\n[{label}] https://youtu.be/{vid}")
-            print(text[:80] + "...")
+        print(f"=== DRY RUN ===\n[{label}] {url}")
+        print(text[:80] + "...")
         return
 
-    if not targets:
-        print("\n投稿対象の動画がありません。")
-        return
-
-    print()
-    success = 0
-    for i, (video_id, text, publish_at) in enumerate(targets, 1):
-        url = f"https://youtu.be/{video_id}"
-        label = f"スケジュール({publish_at})" if publish_at else "非公開"
+    try:
+        logger.info("限定公開に変更中: %s (%s)", url, label)
+        set_video_status(youtube, video_id, "unlisted")
         try:
-            logger.info("[%d/%d] 限定公開に変更中: %s (%s)", i, len(targets), url, label)
-            set_video_status(youtube, video_id, "unlisted")
-            try:
-                comment_id = post_comment(youtube, video_id, text)
-                logger.info("[%d/%d] コメント投稿完了: %s → comment_id: %s", i, len(targets), url, comment_id)
-                success += 1
-            finally:
-                # コメント失敗時も必ず元の状態に戻す
-                logger.info("[%d/%d] 元の状態に復元中: %s", i, len(targets), url)
-                set_video_status(youtube, video_id, "private", publish_at)
-        except HttpError as e:
-            logger.error("[%d/%d] 失敗 %s: %s", i, len(targets), url, e)
-        if i < len(targets):
-            time.sleep(2)
-
-    print(f"\n完了: {success}/{len(targets)} 件投稿しました。{len(skipped)} 件はスキップ（公開・限定公開）。")
+            comment_id = post_comment(youtube, video_id, text)
+            logger.info("コメント投稿完了: %s → comment_id: %s", url, comment_id)
+        finally:
+            logger.info("元の状態に復元中: %s", url)
+            set_video_status(youtube, video_id, "private", publish_at)
+    except HttpError as e:
+        logger.error("失敗 %s: %s", url, e)
 
 
 if __name__ == "__main__":
