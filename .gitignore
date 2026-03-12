@@ -209,6 +209,8 @@ __marimo__/
 # Project-specific
 output/
 logs/
+report.md
+review.txt
 
 # Video / audio files
 *.mp4
