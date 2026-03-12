@@ -219,5 +219,5 @@ logs/
 
 # YouTube API credentials
 credentials.json
-token*.json
+*token*.json
 client_secret*.json
