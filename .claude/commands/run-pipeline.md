@@ -4,9 +4,11 @@
 
 ## 引数
 
-- `--mode news|paper`: 実行モード（デフォルト: `news`）
+- `--mode news|paper|trivia|space`: 実行モード（デフォルト: `news`）
   - `news`: 海外テックニュース記事モード（従来動作）
   - `paper`: 最新技術論文モード（arXiv + HF Daily Papers）
+  - `trivia`: 雑学・豆知識モード（OpenTDB）
+  - `space`: 宇宙・天文モード（NASA APOD + RSS）
 - `--dry-run` / `--skip-upload`: 動画生成まで実行し、YouTube 投稿をスキップ
 - `--from-stage N`: ステージ N から再開（1=fetch, 2=process, 3=script, 4=video, 5=upload）
 - `--run-id ID`: 実行ID（省略時は自動生成済み）。キャッシュパスは `.cache/pipeline/{run_id}/` になる
@@ -31,6 +33,18 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.fetcher.paper
 ```
 完了後、`.cache/pipeline/{run_id}/01_papers.json` を読み込み、配列が空（`[]`）なら「新規論文なし」として後続ステージをスキップし、report.md に「新規論文なし: 処理済み論文のみのため終了」と記録して終了する。
+
+**`--mode trivia` の場合**、/fetch-trivia コマンドを実行:
+```bash
+cd /c/Users/furag/Documents/prog/python/wt-new-themes && uv run python -m news_video_maker.fetcher.trivia
+```
+完了後、`.cache/pipeline/{run_id}/01_trivia.json` を読み込み、配列が空（`[]`）なら「新規雑学なし」として後続ステージをスキップし、report.md に「新規雑学なし: 処理済みデータのみのため終了」と記録して終了する。
+
+**`--mode space` の場合**、/fetch-space コマンドを実行:
+```bash
+cd /c/Users/furag/Documents/prog/python/wt-new-themes && uv run python -m news_video_maker.fetcher.space
+```
+完了後、`.cache/pipeline/{run_id}/01_space.json` を読み込み、配列が空（`[]`）なら「新規宇宙コンテンツなし」として後続ステージをスキップし、report.md に「新規宇宙コンテンツなし: 処理済みデータのみのため終了」と記録して終了する。
 
 （`PIPELINE_RUN_ID` 環境変数が設定済みのため、Python側が自動的に正しいディレクトリへ書き込む）
 
@@ -86,6 +100,21 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 4. **Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存**
 
+**`--mode trivia` の場合**: `/process-trivia` コマンドと同じ手順を実行する:
+
+1. **過去採用タイトルを取得（ネタ被り防止）**: 上記と同様
+2. **雑学データをスコアリング**: `01_trivia.json` を読み込み、驚き度・視覚性・汎用性でスコアリング
+3. **Wikipedia API から image_url を取得**: `https://en.wikipedia.org/api/rest_v1/page/summary/{KEYWORD}` → `thumbnail.source`
+4. **日本語タイトル・要約・キーポイントを生成**
+5. **Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存**
+
+**`--mode space` の場合**: `/process-space` コマンドと同じ手順を実行する:
+
+1. **過去採用タイトルを取得（ネタ被り防止）**: 上記と同様
+2. **宇宙コンテンツをスコアリング**: `01_space.json` を読み込み、視覚的魅力・発見度・スケール感でスコアリング（APOD 優先）
+3. **日本語タイトル・要約・キーポイントを生成**
+4. **Write ツールで `.cache/pipeline/{run_id}/02_selected.json` に保存**
+
 ### ステージ 3: 台本生成
 
 `--from-stage` が 3 以下の場合、以下を実行:
@@ -93,6 +122,8 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 **`--mode news` の場合**: `/gen-script` コマンドと同じ手順で台本を生成する。
 **`--mode paper` の場合**: `/gen-script-paper` コマンドと同じ手順で台本を生成する（セクション構成が論文向けに最適化）。
+**`--mode trivia` の場合**: `/gen-script-trivia` コマンドと同じ手順で台本を生成する（クイズ→驚き→解説構成）。
+**`--mode space` の場合**: `/gen-script-space` コマンドと同じ手順で台本を生成する（スケール→発見→感動構成）。
 
 - Write ツールで `.cache/pipeline/{run_id}/03_script.json` に保存
 
@@ -141,16 +172,16 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 ## 実行ID
 - run_id: {run_id}
-- mode: news / paper
+- mode: news / paper / trivia / space
 
 ## 結果: 成功 / 失敗
 
 ## 取得件数
-- 合計: X件（news: 記事数 / paper: 論文数）
+- 合計: X件（news: 記事数 / paper: 論文数 / trivia: 雑学数 / space: 宇宙コンテンツ数）
 
 ## 選定コンテンツ
 - タイトル: ...
-- ソース: ...（news: techcrunch など / paper: arxiv）
+- ソース: ...（news: techcrunch など / paper: arxiv / trivia: opentdb / space: nasa_apod など）
 - スコア: ...
 
 ## 生成動画
