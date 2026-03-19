@@ -33,6 +33,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _notify_error(title: str, message: str) -> None:
+    """Windowsトースト通知を送る。win11toast が未インストールの場合はスキップ。"""
+    try:
+        from win11toast import notify
+        notify(title, message)
+    except Exception:
+        pass
+
+
 # --- YouTube 認証 -----------------------------------------------------------
 
 def _get_youtube_service():
@@ -165,6 +174,10 @@ def _run_pipeline_for_slot(slot_utc: datetime, mode: str, dry_run: bool) -> None
     result = subprocess.run(cmd, cwd=str(PROJECT_DIR))
     if result.returncode != 0:
         logger.error("パイプライン失敗 (returncode=%d): %s", result.returncode, slot_jst)
+        _notify_error(
+            "パイプライン失敗",
+            f"{slot_jst} の動画生成に失敗しました (code={result.returncode})",
+        )
 
 
 # --- メインロジック -----------------------------------------------------------
@@ -234,6 +247,7 @@ def main():
                 check_and_fill(config, args.dry_run)
             except Exception as e:
                 logger.error("チェック中にエラーが発生しました: %s", e, exc_info=True)
+                _notify_error("スケジューラーエラー", str(e))
             logger.info("%d分後に再チェックします...", interval_minutes)
             time.sleep(interval_minutes * 60)
 
