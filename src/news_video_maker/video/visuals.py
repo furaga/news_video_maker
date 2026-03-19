@@ -402,6 +402,9 @@ async def _render_frames_async(
         browser = await p.chromium.launch()
         page = await browser.new_page(viewport={"width": WIDTH, "height": HEIGHT})
         await page.set_content(html, wait_until="networkidle")
+        # networkidle は「ネットワーク通信なし」を保証するが、背景画像（data URL）の
+        # デコード・描画完了は保証しない。初回フレームが白くなる問題を防ぐために待機する。
+        await page.wait_for_timeout(500)
 
         # フレーム数を事前計算し、丸め誤差を最終チャンクで吸収
         total_needed = max(1, round(section_duration * FPS))
