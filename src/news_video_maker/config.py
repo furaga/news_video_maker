@@ -60,6 +60,13 @@ YOUTUBE_TOKEN_PATH = BASE_DIR / "token.json"
 YOUTUBE_PRIVACY = os.getenv("YOUTUBE_PRIVACY", "public")
 YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
+# BGM / SFX
+ASSETS_DIR = BASE_DIR / "assets"
+BGM_CACHE_DIR = ASSETS_DIR / "bgm" / "cache"
+SFX_TRANSITION_DIR = ASSETS_DIR / "sfx" / "transition"
+BGM_VOLUME = float(os.getenv("BGM_VOLUME", "0.18"))
+SFX_VOLUME = float(os.getenv("SFX_VOLUME", "0.5"))
+
 # ディレクトリ自動作成
-for _d in [PIPELINE_DIR, AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR]:
+for _d in [PIPELINE_DIR, AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, BGM_CACHE_DIR]:
     _d.mkdir(parents=True, exist_ok=True)

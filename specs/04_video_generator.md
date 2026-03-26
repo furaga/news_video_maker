@@ -19,6 +19,14 @@ Python（VOICEVOX + moviepy + Pillow）
 
 **ファイル**: `.cache/pipeline/03_script.json`（`specs/03_script_generator.md` の出力）
 
+### BGM 関連フィールド（`03_script.json` ルートレベル）
+
+| フィールド | 型 | 説明 |
+|---|---|---|
+| `bgm_url` | `string` | BGM の直接ダウンロード URL（MP3/WAV）。空文字の場合は BGM なし |
+| `bgm_title` | `string` | BGM トラック名（ログ・デバッグ用） |
+| `bgm_source_page` | `string` | BGM の参照元ページ URL（クレジット表記用） |
+
 ---
 
 ## 出力
@@ -41,6 +49,17 @@ Python（VOICEVOX + moviepy + Pillow）
 ---
 
 ## 振る舞い
+
+### ステップ0: BGM ダウンロード（bgm_cache.py）
+
+`src/news_video_maker/video/bgm_cache.py` が担当。
+
+台本の `bgm_url` フィールドに直接ダウンロード URL が設定されている場合、初回のみダウンロードして `assets/bgm/cache/` にキャッシュする。
+
+- キャッシュパス: `assets/bgm/cache/{sha256(url)[:16]}.mp3`（または .wav）
+- キャッシュ済みの場合は再ダウンロードしない
+- ダウンロード失敗時は None を返してパイプラインを停止しない（BGM なしで続行）
+- `bgm_url` が空の場合は None を返す（後方互換）
 
 ### ステップ1: 音声合成（VOICEVOX）
 
@@ -92,11 +111,29 @@ VOICEVOX の話者 ID は `config.py` で設定可能にする。
 
 1. 各セクションの WAV の実際の長さを取得
 2. PNG 画像から `ImageClip` を作成（duration = WAV の長さ）
-3. `AudioFileClip` で WAV を読み込む
-4. 各セクションのクリップを `CompositeVideoClip` で合成
-5. セクションを `concatenate_videoclips` で結合
-6. `write_videofile()` で MP4 出力
+3. 映像クリップのみ生成（音声は後でまとめてミックス）
+4. セクションを `concatenate_videoclips` で結合
+5. `audio_mixer.mix_audio()` で BGM・SFX・ナレーションを合成した音声を生成
+6. `final.with_audio(mixed_audio)` で音声を映像に付与
+7. `write_videofile()` で MP4 出力
    - `codec="libx264"`, `audio_codec="aac"`, `fps=30`
+
+### ステップ3.5: 音声ミックス（audio_mixer.py）
+
+`src/news_video_maker/video/audio_mixer.py` が担当。
+
+以下の音声トラックを `CompositeAudioClip` で合成する:
+
+1. **ナレーション**: 各セクションの WAV を開始時刻に配置（`with_start(t)`）
+2. **BGM**: `bgm_path` が指定されている場合
+   - 動画総尺より短い場合は `AudioLoop` でループ
+   - 長い場合は `subclipped(0, total_duration)` でカット
+   - `MultiplyVolume(BGM_VOLUME)` で音量調整（デフォルト: 0.18）
+   - `AudioFadeIn(1.0)` + `AudioFadeOut(2.0)` でフェード
+3. **SFX**: `assets/sfx/transition/` にファイルがある場合
+   - `section_starts[1:]` のタイミング（最初のセクション以外の全切り替え点）に配置
+   - `MultiplyVolume(SFX_VOLUME)` で音量調整（デフォルト: 0.5）
+   - BGM/SFX フォルダが存在しない・空の場合はスキップ（後方互換）
 
 ### 字幕タイミング計算
 
@@ -142,6 +179,30 @@ def generate_text_card(subtitle_text: str, source: str, output_path: Path, image
 # 入力: VideoScript（JSON から復元）
 # 出力: MP4 ファイルパス
 def compose_video(script: VideoScript, output_path: Path) -> Path: ...
+```
+
+### `src/news_video_maker/video/bgm_cache.py`
+
+```python
+# BGM URL からキャッシュパスを返す（初回のみダウンロード）
+# 入力: bgm_url (str)
+# 出力: キャッシュ済みファイルパス、または None（URL 空・失敗時）
+def get_bgm_path(bgm_url: str) -> Path | None: ...
+```
+
+### `src/news_video_maker/video/audio_mixer.py`
+
+```python
+# ナレーション・BGM・SFX を CompositeAudioClip でミックス
+# 入力: ナレーション WAV リスト、開始時刻リスト、総尺、BGM パス
+# 出力: ミックス済み AudioClip
+def mix_audio(
+    narration_wavs: list[Path],
+    section_starts: list[float],
+    total_duration: float,
+    bgm_path: Path | None = None,
+    bgm_volume: float = BGM_VOLUME,
+) -> AudioClip: ...
 ```
 
 ---

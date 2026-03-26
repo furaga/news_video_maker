@@ -11,7 +11,9 @@ from pathlib import Path
 from moviepy import AudioFileClip, concatenate_videoclips
 
 from news_video_maker.config import AUDIO_DIR, IMAGES_DIR, OUTPUT_DIR, PIPELINE_DIR
+from news_video_maker.video.audio_mixer import mix_audio
 from news_video_maker.video.background import generate_background_images
+from news_video_maker.video.bgm_cache import get_bgm_path
 from news_video_maker.video.tts import synthesize
 from news_video_maker.video.visuals import (
     generate_cta_clip,
@@ -143,6 +145,9 @@ class VideoScript:
     total_duration_sec: float
     sections: list[ScriptSection]
     image_url: str = ""
+    bgm_url: str = ""
+    bgm_title: str = ""
+    bgm_source_page: str = ""
 
 
 def load_script(path: Path) -> VideoScript:
@@ -165,6 +170,9 @@ def load_script(path: Path) -> VideoScript:
         total_duration_sec=data["total_duration_sec"],
         sections=sections,
         image_url=data.get("image_url", ""),
+        bgm_url=data.get("bgm_url", ""),
+        bgm_title=data.get("bgm_title", ""),
+        bgm_source_page=data.get("bgm_source_page", ""),
     )
 
 
@@ -251,10 +259,13 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     # クリップ生成
     clips = []
     section_start = 0.0
+    section_start_times = []  # 音声ミックス用に各セクションの開始時刻を記録
 
     for i, section in enumerate(all_sections):
         wav_path = wav_paths[i]
         duration = durations[i]
+
+        section_start_times.append(section_start)
 
         # セクションに対応する背景画像を選択
         if section.type == "hook" and hook_bg_data_url:
@@ -287,7 +298,6 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             chunks = split_into_subtitle_chunks(section.narration_text)
             chunk_durs = _calc_chunk_durations(chunks, duration)
 
-        audio = AudioFileClip(str(wav_path))
         video_clip = generate_subtitle_clip(
             title=script.title,
             subtitle_chunks=chunks,
@@ -298,24 +308,34 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
             total_duration=total_duration,
             annotations=section.annotations or None,
         )
-        video_clip = video_clip.with_audio(audio)
         clips.append(video_clip)
         section_start += duration
 
     # CTAセクション
     cta_bg = bg_list[-1] if bg_list else hook_bg_data_url or ""
-    cta_audio = AudioFileClip(str(cta_wav_path))
+    section_start_times.append(section_start)  # CTAの開始時刻
     cta_video = generate_cta_clip(
         bg_data_url=cta_bg,
         duration=cta_duration,
         section_start=section_start,
         total_duration=total_duration,
     )
-    cta_video = cta_video.with_audio(cta_audio)
     clips.append(cta_video)
 
     # 全セクションを結合
     final = concatenate_videoclips(clips)
+
+    # BGM・SFX・ナレーションを合成した音声トラックを生成して映像に付与
+    bgm_path = get_bgm_path(script.bgm_url)
+    if script.bgm_title:
+        logger.info("BGM: %s", script.bgm_title)
+    mixed_audio = mix_audio(
+        narration_wavs=wav_paths + [cta_wav_path],
+        section_starts=section_start_times,
+        total_duration=total_duration,
+        bgm_path=bgm_path,
+    )
+    final = final.with_audio(mixed_audio)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     final.write_videofile(
