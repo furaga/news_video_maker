@@ -41,20 +41,22 @@ _SUBTITLE_TEMPLATE = """\
   /* タイトルバー（上部フルwidth） */
   .title-bar {{
     position: absolute;
-    top: 160px; left: 0; right: 0;
+    top: 200px; left: 0; right: 0;
     z-index: 20;
     background: rgba(0, 0, 0, 0.90);
     padding: 40px 50px 36px;
   }}
   .title-text {{
-    font-size: 80px; font-weight: 900;
+    font-size: 100px; font-weight: 900;
     color: #FFFFFF;
     line-height: 1.25;
     word-break: break-all;
     letter-spacing: -1px;
+    text-shadow: 1px 0 0 #FFFFFF, -1px 0 0 #FFFFFF, 0 1px 0 #FFFFFF, 0 -1px 0 #FFFFFF;
   }}
   .title-text .kw {{
-    color: #FFE000;
+    color: #FF2222;
+    text-shadow: 1px 0 0 #FF2222, -1px 0 0 #FF2222, 0 1px 0 #FF2222, 0 -1px 0 #FF2222;
   }}
   /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px）
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
