@@ -16,8 +16,6 @@ from news_video_maker.video.tts import synthesize
 from news_video_maker.video.visuals import (
     generate_cta_clip,
     generate_subtitle_clip,
-    image_to_data_url,
-    screenshot_article_url,
     split_into_subtitle_chunks,
 )
 
@@ -215,13 +213,14 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     # hookセクションは記事スクリーンショットを使うため、AI生成は残りセクション分
     num_ai_images = max(1, len(all_sections))  # セクションごとに1枚
 
-    # hookセクション用: 記事スクリーンショット（全画面）
+    # hookセクション用: 事前キャプチャ済みスクリーンショット（ステージ3.5で検証済み）
     hook_bg_data_url = ""
-    if script.image_url:
-        hook_bg_data_url = image_to_data_url(script.image_url) or ""
-    if not hook_bg_data_url:
-        logger.info("hookセクション用: 記事URLからスクリーンショットを取得: %s", script.source_url)
-        hook_bg_data_url = screenshot_article_url(script.source_url) or ""
+    pre_captured = IMAGES_DIR / "article_screenshot_full.png"
+    if pre_captured.exists():
+        logger.info("検証済みスクリーンショットを使用: %s", pre_captured)
+        hook_bg_data_url = _path_to_data_url(pre_captured)
+    else:
+        logger.info("スクリーンショットなし。SD生成画像をhookセクションに使用します")
 
     # セクションごとの bg_prompt を収集（存在する場合）
     section_bg_prompts = [s.bg_prompt for s in all_sections]

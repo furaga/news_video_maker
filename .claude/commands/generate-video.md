@@ -4,7 +4,19 @@
 
 ## 手順
 
-Bash ツールで以下を実行:
+### 1. スクリーンショット撮影・検証
+
+```bash
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.video.screenshot
+```
+
+撮影に成功した場合、Read ツールで `.cache/images/article_screenshot_full.png`（`PIPELINE_RUN_ID` 設定時は `.cache/images/{run_id}/article_screenshot_full.png`）を読み込み、有効な記事スクリーンショットかを判定する:
+- 記事のテキストや画像など、実際のウェブページコンテンツが表示されているか
+- 白画面・空白ページ・ブラウザのログイン画面・エラーページではないか
+
+**無効な場合**: 画像ファイルを削除する（composer が SD 生成画像を自動的に hook セクションに使用する）
+
+### 2. 動画生成
 
 ```bash
 cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.video.composer
