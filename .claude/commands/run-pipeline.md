@@ -99,7 +99,30 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 **`--mode paper` の場合**: `/gen-script-paper` コマンドと同じ手順で台本を生成する（セクション構成が論文向けに最適化）。
 
 - Write ツールで `.cache/pipeline/{run_id}/03_script.json` に保存
-- **台本を保存したらセッションを終了せず、直ちにステージ4（動画生成）に進む。**
+- **台本を保存したらセッションを終了せず、直ちにステージ3.5（スクリーンショット検証）に進む。**
+
+### ステージ 3.5: スクリーンショット検証
+
+`--from-stage` が 4 以下の場合、以下を実行:
+
+1. スクリーンショットを撮影:
+```bash
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m news_video_maker.video.screenshot
+```
+
+2. 撮影に成功した場合、Read ツールで `.cache/images/{run_id}/article_screenshot_full.png` を読み込む（画像として表示される）
+
+3. 画像が有効な記事スクリーンショットかを判定する:
+   - 記事のテキストや画像など、実際のウェブページコンテンツが表示されているか
+   - 白画面・空白ページ・ブラウザのログイン画面・エラーページではないか
+
+4. **無効な場合**: 画像ファイルを削除する:
+   ```bash
+   rm .cache/images/{run_id}/article_screenshot_full.png
+   ```
+   → ステージ4で composer が SD 生成画像を自動的に hook セクションに使用する
+
+5. **有効な場合**: そのまま次のステージに進む
 
 ### ステージ 4: 動画生成
 
