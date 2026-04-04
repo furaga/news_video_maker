@@ -31,12 +31,15 @@ _SUBTITLE_TEMPLATE = """\
     font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
+  /* 背景画像（タイトルと字幕の間に収まるサイズ） */
   .bg {{
-    position: absolute; inset: 0;
+    position: absolute;
+    top: 500px; left: 0; right: 0; bottom: 500px;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
     transform: scale(1.0);
     transform-origin: center center;
+    overflow: hidden;
   }}
   /* タイトルバー（上部フルwidth） */
   .title-bar {{
@@ -62,7 +65,7 @@ _SUBTITLE_TEMPLATE = """\
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
   .subtitle-area {{
     position: absolute;
-    bottom: 500px; left: 50px; right: 140px;
+    bottom: 230px; left: 50px; right: 140px;
     z-index: 20;
     text-align: left;
   }}
