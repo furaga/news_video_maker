@@ -5,7 +5,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-OUTPUT_SIZE = (1080, 1920)
+OUTPUT_SIZE = (1080, 1216)
 
 _NEGATIVE_PROMPT = (
     "text, watermark, logo, signature, people, face, hands, body parts, "
@@ -118,7 +118,7 @@ def generate_background_images(
             image = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
-                height=896,
+                height=576,
                 width=512,
                 num_inference_steps=30,
                 guidance_scale=7.5,

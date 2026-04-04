@@ -36,7 +36,7 @@ _SUBTITLE_TEMPLATE = """\
   .title-band {{
     flex-shrink: 0;
     background: #111111;
-    padding: 80px 40px 40px;
+    padding: 40px 40px 30px;
     z-index: 20;
   }}
   .title-text {{
@@ -48,7 +48,7 @@ _SUBTITLE_TEMPLATE = """\
   .title-text .kw {{
     color: #FF2222;
   }}
-  /* 中央画像エリア（残り全体を占める） */
+  /* 中央画像エリア */
   .image-area {{
     flex: 1;
     position: relative;
@@ -61,12 +61,16 @@ _SUBTITLE_TEMPLATE = """\
     transform: scale(1.0);
     transform-origin: center center;
   }}
-  /* 字幕エリア（画像上にオーバーレイ）
+  /* 下部字幕帯
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
-  .subtitle-area {{
-    position: absolute;
-    bottom: 400px; left: 50px; right: 140px;
+  .subtitle-band {{
+    flex-shrink: 0;
+    background: #111111;
+    padding: 30px 50px 120px;
+    min-height: 400px;
     z-index: 20;
+  }}
+  .subtitle-area {{
     text-align: left;
   }}
   .subtitle-line {{
@@ -102,6 +106,8 @@ _SUBTITLE_TEMPLATE = """\
   </div>
   <div class="image-area">
     <div class="bg" id="bg"></div>
+  </div>
+  <div class="subtitle-band">
     <div class="subtitle-area">
       <span class="subtitle-line" id="subtitle">{subtitle_html}</span>
     </div>
