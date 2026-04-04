@@ -65,7 +65,7 @@ _SUBTITLE_TEMPLATE = """\
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
   .subtitle-area {{
     position: absolute;
-    bottom: 500px; left: 50px; right: 140px;
+    bottom: 350px; left: 50px; right: 140px;
     z-index: 20;
     text-align: left;
   }}
