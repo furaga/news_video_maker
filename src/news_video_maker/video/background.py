@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 OUTPUT_SIZE = (1080, 920)
 
 _NEGATIVE_PROMPT = (
-    "text, watermark, logo, signature, people, face, hands, body parts, "
+    "text, watermark, logo, signature, "
     "ugly, blurry, low quality, distorted, deformed, mutated, extra limbs, "
     "artifacts, cartoon, anime, painting, sketch, nsfw, oversaturated"
 )
