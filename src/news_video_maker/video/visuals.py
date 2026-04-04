@@ -27,9 +27,32 @@ _SUBTITLE_TEMPLATE = """\
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
-    background: #0d1117;
+    background: #111111;
     font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
-    overflow: hidden; position: relative;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }}
+  /* 上部タイトル帯 */
+  .title-band {{
+    flex-shrink: 0;
+    background: #111111;
+    padding: 80px 40px 40px;
+    z-index: 20;
+  }}
+  .title-text {{
+    font-size: 90px; font-weight: 900;
+    color: #FFFFFF;
+    line-height: 1.3;
+    letter-spacing: -1px;
+  }}
+  .title-text .kw {{
+    color: #FF2222;
+  }}
+  /* 中央画像エリア（残り全体を占める） */
+  .image-area {{
+    flex: 1;
+    position: relative;
+    overflow: hidden;
   }}
   .bg {{
     position: absolute; inset: 0;
@@ -38,31 +61,11 @@ _SUBTITLE_TEMPLATE = """\
     transform: scale(1.0);
     transform-origin: center center;
   }}
-  /* タイトルバー（上部フルwidth） */
-  .title-bar {{
-    position: absolute;
-    top: 200px; left: 0; right: 0;
-    z-index: 20;
-    background: rgba(0, 0, 0, 0.90);
-    padding: 40px 50px 36px;
-  }}
-  .title-text {{
-    font-size: 100px; font-weight: 900;
-    color: #FFFFFF;
-    line-height: 1.25;
-    word-break: break-all;
-    letter-spacing: -1px;
-    text-shadow: 1px 0 0 #FFFFFF, -1px 0 0 #FFFFFF, 0 1px 0 #FFFFFF, 0 -1px 0 #FFFFFF;
-  }}
-  .title-text .kw {{
-    color: #FF2222;
-    text-shadow: 1px 0 0 #FF2222, -1px 0 0 #FF2222, 0 1px 0 #FF2222, 0 -1px 0 #FF2222;
-  }}
-  /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px）
+  /* 字幕エリア（画像上にオーバーレイ）
      NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
   .subtitle-area {{
     position: absolute;
-    bottom: 500px; left: 50px; right: 140px;
+    bottom: 400px; left: 50px; right: 140px;
     z-index: 20;
     text-align: left;
   }}
@@ -94,12 +97,14 @@ _SUBTITLE_TEMPLATE = """\
 </style>
 </head>
 <body>
-  <div class="bg" id="bg"></div>
-  <div class="title-bar">
+  <div class="title-band">
     <div class="title-text">{title_html}</div>
   </div>
-  <div class="subtitle-area">
-    <span class="subtitle-line" id="subtitle">{subtitle_html}</span>
+  <div class="image-area">
+    <div class="bg" id="bg"></div>
+    <div class="subtitle-area">
+      <span class="subtitle-line" id="subtitle">{subtitle_html}</span>
+    </div>
   </div>
 </body>
 </html>
