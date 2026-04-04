@@ -209,24 +209,14 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
 
     total_duration = sum(durations) + cta_duration
 
-    # 背景画像を複数生成（セクション数に基づいて枚数決定）
-    # hookセクションは記事スクリーンショットを使うため、AI生成は残りセクション分
-    num_ai_images = max(1, len(all_sections))  # セクションごとに1枚
-
-    # hookセクション用: 事前キャプチャ済みスクリーンショット（ステージ3.5で検証済み）
-    hook_bg_data_url = ""
-    pre_captured = IMAGES_DIR / "article_screenshot_full.png"
-    if pre_captured.exists():
-        logger.info("検証済みスクリーンショットを使用: %s", pre_captured)
-        hook_bg_data_url = _path_to_data_url(pre_captured)
-    else:
-        logger.info("スクリーンショットなし。SD生成画像をhookセクションに使用します")
+    # 背景画像を複数生成（全セクション分、hookも含めてAI生成を使用）
+    num_ai_images = max(1, len(all_sections))
 
     # セクションごとの bg_prompt を収集（存在する場合）
     section_bg_prompts = [s.bg_prompt for s in all_sections]
     custom_prompts = section_bg_prompts if any(section_bg_prompts) else None
 
-    # AI生成背景画像（全セクション共通のフォールバック兼、hookセクション以外用）
+    # AI生成背景画像（全セクション共通）
     bg_list: list[str] = []
     ai_bg_results = generate_background_images(
         article_title_en,
@@ -238,14 +228,9 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
     for bg_path, _ in ai_bg_results:
         bg_list.append(_path_to_data_url(bg_path))
 
-    # AI生成に失敗した場合、hookスクリーンショットを全セクションで使い回す
+    # AI生成に失敗した場合、空文字列をフォールバック
     if not bg_list:
-        fallback = hook_bg_data_url or ""
-        bg_list = [fallback] * num_ai_images
-
-    # hookセクションのbg: スクリーンショット優先、なければAI生成の最初の1枚
-    if not hook_bg_data_url and bg_list:
-        hook_bg_data_url = bg_list[0]
+        bg_list = [""] * num_ai_images
 
     # クリップ生成
     clips = []
@@ -256,11 +241,8 @@ def compose_video(script: VideoScript, output_path: Path) -> Path:
         duration = durations[i]
 
         # セクションに対応する背景画像を選択
-        if section.type == "hook" and hook_bg_data_url:
-            bg_data_url = hook_bg_data_url
-        else:
-            bg_idx = i % len(bg_list)
-            bg_data_url = bg_list[bg_idx]
+        bg_idx = i % len(bg_list)
+        bg_data_url = bg_list[bg_idx]
 
         # 字幕チャンク生成: display_text があればマークアップ保持で分割、なければ narration_text を使用
         if section.display_text:
