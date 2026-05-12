@@ -25,15 +25,13 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 アップロード成功後、即時に投稿者コメントを投稿する。
 
-1. `.cache/youtube_comments.md` を Read ツールで読み込み、該当動画のエントリの URL が `（未アップロード）` になっている場合は Edit ツールで実際の YouTube URL に書き換える。
-
-2. 以下を実行してコメントを投稿する（`VIDEO_ID` はアップロード結果から取得した値）:
+以下を実行してコメントを投稿する（`VIDEO_ID` はアップロード結果から取得した値）:
 
 ```bash
-cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id VIDEO_ID
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id VIDEO_ID --comment-file .cache/pipeline/05_comment.txt
 ```
 
-> **仕組み**: 非公開・スケジュール公開動画は一時的に限定公開→コメント投稿→元の状態（非公開 or スケジュール）に自動復元される。
+> **仕組み**: コメント本文は `.cache/pipeline/05_comment.txt` から直接読み込まれる。非公開・スケジュール公開動画は一時的に限定公開→コメント投稿→元の状態に自動復元される。投稿成功後、スクリプトが自動的に `.cache/youtube_comments.md` の該当エントリの URL を更新する。
 
 実行結果（コメントID or エラー）を報告する。
 

@@ -164,7 +164,7 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
    `.cache/pipeline/{run_id}/05_youtube_url.txt` を Read ツールで読み込み、URL から VIDEO_ID（`https://youtu.be/` 以降の文字列）を取得して実行:
    ```bash
-   cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id {VIDEO_ID}
+   cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id {VIDEO_ID} --comment-file .cache/pipeline/{run_id}/05_comment.txt
    ```
    - エラーが出ても（認証未初期化・API エラーなど）パイプライン全体は停止しない
    - 結果（コメント ID またはエラー内容）を report.md の YouTube セクションに記録する

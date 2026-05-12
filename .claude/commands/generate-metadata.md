@@ -79,8 +79,9 @@ URL: https://youtu.be/{video_id}
 ---
 ```
 
-- `{video_id}` がまだ不明な場合（アップロード前）は `URL: （未アップロード）` と記載する。アップロード後に `/upload` コマンドが実際の URL に書き換える。
+- `{video_id}` がまだ不明な場合（アップロード前）は `URL: （未アップロード）` と記載する。アップロード後に `post_comments.py` が自動的に実際の URL に書き換える。
 - 追記前に `.cache/youtube_comments.md` を Read ツールで読み込み、同じタイトルまたは URL がすでに存在する場合は追記しない（重複防止）。
+- **コメント本文のみ**（タイトル・URL・生成日ヘッダーなし）を Write ツールで `.cache/pipeline/05_comment.txt` にも保存する。このファイルはコメント投稿時に `post_comments.py` が直接参照する。
 
 ## 前提条件
 

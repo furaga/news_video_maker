@@ -13,6 +13,7 @@ import argparse
 import logging
 import os
 import re
+import time
 from pathlib import Path
 
 import google.auth.transport.requests
@@ -73,6 +74,34 @@ def parse_comments_file(path: Path) -> list[tuple[str, str]]:
             results.append((video_id, "\n".join(comment_lines).strip()))
 
     return results
+
+
+def update_comments_file_url(path: Path, video_id: str, comment_text: str) -> bool:
+    """youtube_comments.md の（未アップロード）エントリを実URLに更新する。
+    comment_text の先頭40文字でマッチングする。"""
+    if not path.exists():
+        return False
+
+    full_text = path.read_text(encoding="utf-8")
+    sections = full_text.split("\n---\n")
+    updated = False
+    snippet = comment_text.strip()[:40]
+
+    for i, section in enumerate(sections):
+        if "未アップロード" not in section:
+            continue
+        if snippet and snippet in section:
+            sections[i] = section.replace(
+                "URL: （未アップロード）",
+                f"URL: https://youtu.be/{video_id}",
+            )
+            updated = True
+            break
+
+    if updated:
+        path.write_text("\n---\n".join(sections), encoding="utf-8")
+        logger.info("youtube_comments.md を更新: %s → https://youtu.be/%s", snippet[:20], video_id)
+    return updated
 
 
 def authenticate():
@@ -140,30 +169,55 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="投稿せず確認のみ")
     parser.add_argument("--video-id", required=True, help="対象動画ID（必須）")
+    parser.add_argument("--comment-file", type=str, default=None,
+                        help="コメントテキストファイルのパス（指定時はyoutube_comments.mdの検索をスキップ）")
     args = parser.parse_args()
 
-    if not COMMENTS_FILE.exists():
-        print(f"コメントファイルが見つかりません: {COMMENTS_FILE}")
-        return
+    video_id = args.video_id
 
-    comments = parse_comments_file(COMMENTS_FILE)
-    comments = [(vid, text) for vid, text in comments if vid == args.video_id]
-    if not comments:
-        print(f"指定された動画IDのコメントが見つかりません: {args.video_id}")
-        return
+    # コメント本文を解決
+    if args.comment_file:
+        comment_path = Path(args.comment_file)
+        if not comment_path.exists():
+            print(f"コメントファイルが見つかりません: {comment_path}")
+            return
+        text = comment_path.read_text(encoding="utf-8").strip()
+        if not text:
+            print(f"コメントファイルが空です: {comment_path}")
+            return
+    else:
+        if not COMMENTS_FILE.exists():
+            print(f"コメントファイルが見つかりません: {COMMENTS_FILE}")
+            return
+        comments = parse_comments_file(COMMENTS_FILE)
+        comments = [(vid, t) for vid, t in comments if vid == video_id]
+        if not comments:
+            print(f"指定された動画IDのコメントが見つかりません: {video_id}")
+            return
+        _, text = comments[0]
 
     youtube = authenticate()
 
-    video_id, text = comments[0]
     url = f"https://youtu.be/{video_id}"
-    s = get_video_status(youtube, [video_id]).get(video_id, {})
-    privacy = s.get("privacyStatus")
-    publish_at = s.get("publishAt")
-    label = f"スケジュール({publish_at})" if publish_at else privacy or "不明"
 
-    if privacy != "private":
-        print(f"スキップ: {url} ({privacy}) — 非公開・スケジュール動画のみ対象")
+    # 動画ステータス確認（リトライ付き: アップロード直後のAPI反映遅延に対応）
+    privacy = None
+    publish_at = None
+    for attempt in range(3):
+        s = get_video_status(youtube, [video_id]).get(video_id, {})
+        privacy = s.get("privacyStatus")
+        publish_at = s.get("publishAt")
+        if privacy == "private":
+            break
+        if attempt < 2:
+            logger.info("動画ステータス確認待ち (%s)... 10秒後にリトライ", privacy)
+            time.sleep(10)
+    else:
+        label = f"スケジュール({publish_at})" if publish_at else privacy or "不明"
+        print(f"スキップ: {url} ({label}) — 非公開・スケジュール動画のみ対象")
         return
+
+    label = f"スケジュール({publish_at})" if publish_at else "private"
 
     if args.dry_run:
         print(f"=== DRY RUN ===\n[{label}] {url}")
@@ -176,6 +230,9 @@ def main():
         try:
             comment_id = post_comment(youtube, video_id, text)
             logger.info("コメント投稿完了: %s → comment_id: %s", url, comment_id)
+            # youtube_comments.md の（未アップロード）エントリを自動更新
+            if COMMENTS_FILE.exists():
+                update_comments_file_url(COMMENTS_FILE, video_id, text)
         finally:
             logger.info("元の状態に復元中: %s", url)
             set_video_status(youtube, video_id, "private", publish_at)
