@@ -27,7 +27,7 @@ _SUBTITLE_TEMPLATE = """\
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
-    background: #F7F4EC;
+    background: #E9DFC7;
     font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
@@ -46,8 +46,8 @@ _SUBTITLE_TEMPLATE = """\
     position: absolute;
     top: 0; left: 0; right: 0; height: 520px;
     z-index: 20;
-    background: #F7F4EC;
-    border-bottom: 3px double #1a1a1a;
+    background: #E9DFC7;
+    border-bottom: 6px double #1a1a1a;
     padding: 150px 56px 0;
   }}
   .title-text {{
@@ -86,11 +86,11 @@ _SUBTITLE_TEMPLATE = """\
     ruby-position: over;
   }}
   .subtitle-line rt {{
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     color: #cbb98a;
-    background: transparent;
-    padding: 0 4px;
+    background: rgba(20, 18, 14, 0.92);
+    padding: 2px 8px;
   }}
 </style>
 </head>
@@ -116,7 +116,7 @@ _CTA_TEMPLATE = """\
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
-    background: #F7F4EC;
+    background: #E9DFC7;
     font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
