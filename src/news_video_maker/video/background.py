@@ -1,4 +1,4 @@
-"""Stable Diffusion による背景画像生成"""
+"""Stable Diffusion / SDXL Turbo による背景画像生成"""
 import json
 import logging
 from pathlib import Path
@@ -23,21 +23,53 @@ def _build_prompt(article_title: str, keyword: str) -> tuple[str, str]:
     return prompt, _NEGATIVE_PROMPT
 
 
-def _load_sd_pipeline(model_id: str, device: str, dtype):
-    from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
+def _is_sdxl(model_id: str) -> bool:
+    """モデルIDから SDXL 系かどうかを判定する（SD1.5 系との分岐用）。"""
+    return "xl" in model_id.lower()
 
-    pipe = StableDiffusionPipeline.from_pretrained(
-        model_id,
-        torch_dtype=dtype,
-        safety_checker=None,
-    )
-    pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-        pipe.scheduler.config,
-        algorithm_type="dpmsolver++",
-        use_karras_sigmas=True,
-    )
-    pipe.enable_attention_slicing()
-    pipe = pipe.to(device)
+
+def _generation_params(model_id: str) -> dict:
+    """モデル系統ごとの生成パラメータを返す。
+
+    - SDXL Turbo 系: 832×704 / 7 steps / cfg 2.0
+      （8GB VRAM 前提。0.6MP 以下 + CPUオフロードで動かすための解像度）
+    - SD 1.5 系:     512×448 / 30 steps / cfg 7.5（従来パラメータ）
+
+    いずれも最終的に OUTPUT_SIZE (1080×920) へリサイズする。
+    """
+    if _is_sdxl(model_id):
+        return {"height": 704, "width": 832, "num_inference_steps": 7, "guidance_scale": 2.0}
+    return {"height": 448, "width": 512, "num_inference_steps": 30, "guidance_scale": 7.5}
+
+
+def _load_pipeline(model_id: str, device: str, dtype):
+    """AutoPipelineForText2Image で SD1.5 / SDXL 双方をロードする。
+
+    8GB VRAM 対策として GPU では enable_model_cpu_offload() + vae.enable_slicing() を使い、
+    .to("cuda") は使わない（オフロードが自動でデバイス配置を管理するため）。
+    スケジューラはモデル同梱設定をそのまま使う（Turbo 系は DPM++ SDE）。
+    """
+    from diffusers import AutoPipelineForText2Image
+
+    load_kwargs = {"torch_dtype": dtype}
+    if not _is_sdxl(model_id):
+        # SD1.5 系は NSFW セーフティチェッカーを無効化（誤検知による黒塗りを防ぐ）
+        load_kwargs["safety_checker"] = None
+
+    if device == "cuda":
+        # fp16 variant を優先し、無ければ通常の重みにフォールバック
+        try:
+            pipe = AutoPipelineForText2Image.from_pretrained(
+                model_id, variant="fp16", **load_kwargs
+            )
+        except Exception:
+            pipe = AutoPipelineForText2Image.from_pretrained(model_id, **load_kwargs)
+        pipe.enable_model_cpu_offload()  # accelerate 必須。8GB VRAM でも SDXL が動く
+        pipe.vae.enable_slicing()
+    else:
+        # CPU フォールバック（.to("cuda") もオフロードもしない）
+        pipe = AutoPipelineForText2Image.from_pretrained(model_id, **load_kwargs)
+
     return pipe
 
 
@@ -58,7 +90,7 @@ def generate_background_images(
     try:
         import torch
         from PIL import Image
-        from diffusers import StableDiffusionPipeline  # noqa: F401
+        from diffusers import AutoPipelineForText2Image  # noqa: F401
     except ImportError:
         logger.warning(
             "diffusers が未インストールのため背景画像生成をスキップします。"
@@ -99,8 +131,10 @@ def generate_background_images(
         return results
 
     try:
-        logger.info("Stable Diffusion モデルを読み込み中: %s", SD_MODEL_ID)
-        pipe = _load_sd_pipeline(SD_MODEL_ID, device, dtype)
+        logger.info("背景生成モデルを読み込み中: %s", SD_MODEL_ID)
+        pipe = _load_pipeline(SD_MODEL_ID, device, dtype)
+        gen_params = _generation_params(SD_MODEL_ID)
+        logger.info("生成パラメータ: %s", gen_params)
 
         for i in range(num_images):
             out_path = output_dir / f"bg_{i:02d}.png"
@@ -118,10 +152,7 @@ def generate_background_images(
             image = pipe(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
-                height=448,
-                width=512,
-                num_inference_steps=30,
-                guidance_scale=7.5,
+                **gen_params,
             ).images[0]
 
             image = image.resize(OUTPUT_SIZE, Image.LANCZOS)
