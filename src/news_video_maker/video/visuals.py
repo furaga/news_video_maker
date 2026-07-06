@@ -35,11 +35,15 @@ _SUBTITLE_TEMPLATE = """\
   .bg {{
     position: absolute;
     top: 520px; left: 0; right: 0; bottom: 480px;
+    overflow: hidden;
+  }}
+  /* 内側の画像だけを中心基準でズーム／パンする（窓は固定） */
+  .bg-img {{
+    position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
     transform: scale(1.0);
     transform-origin: center center;
-    overflow: hidden;
   }}
   /* タイトル部（上部クリーム紙面 top:0〜520px、下端に二重罫線） */
   .paper {{
@@ -95,7 +99,7 @@ _SUBTITLE_TEMPLATE = """\
 </style>
 </head>
 <body>
-  <div class="bg" id="bg"></div>
+  <div class="bg" id="bg"><div class="bg-img" id="bg-img"></div></div>
   <div class="paper">
     <div class="title-text">{title_html}</div>
   </div>
@@ -124,11 +128,15 @@ _CTA_TEMPLATE = """\
   .bg {{
     position: absolute;
     top: 520px; left: 0; right: 0; bottom: 480px;
+    overflow: hidden;
+  }}
+  /* 内側の画像だけを中心基準でズーム／パンする（窓は固定） */
+  .bg-img {{
+    position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
     transform: scale(1.0);
     transform-origin: center center;
-    overflow: hidden;
   }}
   .cta-center {{
     position: absolute; inset: 0;
@@ -155,7 +163,7 @@ _CTA_TEMPLATE = """\
 </style>
 </head>
 <body>
-  <div class="bg" id="bg"></div>
+  <div class="bg" id="bg"><div class="bg-img" id="bg-img"></div></div>
   <div class="cta-center">
     <div class="cta-emoji">👍🔔</div>
     <div style="text-align: center;">
@@ -434,7 +442,7 @@ async def _render_frames_async(
 
                 await page.evaluate(
                     """([localElapsed, sectionDuration, panDir]) => {
-                        const bgEl = document.getElementById('bg');
+                        const bgEl = document.getElementById('bg-img');
                         if (bgEl) {
                             const progress = Math.min(localElapsed / sectionDuration, 1.0);
                             const bgScale = 1.0 + 0.20 * progress;
