@@ -27,42 +27,45 @@ _SUBTITLE_TEMPLATE = """\
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
-    background: #0d1117;
+    background: #E9DFC7;
     font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
-  /* 背景画像（タイトルと字幕の間に収まるサイズ） */
+  /* 背景画像（クリーム紙面と字幕の間に収まる窓） */
   .bg {{
     position: absolute;
-    top: 500px; left: 0; right: 0; bottom: 500px;
+    top: 520px; left: 0; right: 0; bottom: 480px;
+    overflow: hidden;
+  }}
+  /* 内側の画像だけを中心基準でズーム／パンする（窓は固定） */
+  .bg-img {{
+    position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
     transform: scale(1.0);
     transform-origin: center center;
-    overflow: hidden;
   }}
-  /* タイトルバー（上部フルwidth） */
-  .title-bar {{
+  /* タイトル部（上部クリーム紙面 top:0〜520px、下端に二重罫線） */
+  .paper {{
     position: absolute;
-    top: 200px; left: 0; right: 0;
+    top: 0; left: 0; right: 0; height: 520px;
     z-index: 20;
-    background: rgba(0, 0, 0, 0.90);
-    padding: 40px 50px 36px;
+    background: #E9DFC7;
+    border-bottom: 6px double #1a1a1a;
+    padding: 150px 56px 0;
   }}
   .title-text {{
     font-size: 100px; font-weight: 900;
-    color: #FFFFFF;
-    line-height: 1.25;
+    color: #111111;
+    line-height: 1.3;
     word-break: break-all;
     letter-spacing: -1px;
-    text-shadow: 1px 0 0 #FFFFFF, -1px 0 0 #FFFFFF, 0 1px 0 #FFFFFF, 0 -1px 0 #FFFFFF;
   }}
   .title-text .kw {{
-    color: #FF2222;
-    text-shadow: 1px 0 0 #FF2222, -1px 0 0 #FF2222, 0 1px 0 #FF2222, 0 -1px 0 #FF2222;
+    color: #C41E1E;
   }}
-  /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 500px）
-     NewsPicks ザブトンスタイル: 白背景 + 黒文字、キーワードは黄色背景 */
+  /* 字幕エリア（YouTube Shorts UIセーフゾーン: bottom >= 480px）
+     D3 クリーム版: ダークバンド + クリーム文字、キーワードは金色 */
   .subtitle-area {{
     position: absolute;
     bottom: 230px; left: 50px; right: 140px;
@@ -71,34 +74,33 @@ _SUBTITLE_TEMPLATE = """\
   }}
   .subtitle-line {{
     display: inline;
-    background: #ffffff;
-    color: #111111;
+    background: rgba(20, 18, 14, 0.92);
+    color: #F7F4EC;
     font-size: 64px; font-weight: 900;
     line-height: 1.85;
-    padding: 6px 14px;
+    padding: 6px 18px;
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
     letter-spacing: -1px;
   }}
   .subtitle-line .kw {{
-    background: #FFE000;
-    color: #111111;
+    color: #FFD25E;
   }}
   .subtitle-line ruby {{
     ruby-position: over;
   }}
   .subtitle-line rt {{
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
-    color: #666666;
-    background: #ffffff;
-    padding: 0 4px;
+    color: #cbb98a;
+    background: rgba(20, 18, 14, 0.92);
+    padding: 2px 8px;
   }}
 </style>
 </head>
 <body>
-  <div class="bg" id="bg"></div>
-  <div class="title-bar">
+  <div class="bg" id="bg"><div class="bg-img" id="bg-img"></div></div>
+  <div class="paper">
     <div class="title-text">{title_html}</div>
   </div>
   <div class="subtitle-area">
@@ -118,11 +120,18 @@ _CTA_TEMPLATE = """\
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
     width: {width}px; height: {height}px;
-    background: #0d1117;
+    background: #E9DFC7;
     font-family: 'M PLUS 1p', 'BIZ UDGothic', 'Noto Sans JP', 'Meiryo', 'Yu Gothic', sans-serif;
     overflow: hidden; position: relative;
   }}
+  /* 背景画像（字幕フレームと同じ窓に収めてクリーム紙面と統一） */
   .bg {{
+    position: absolute;
+    top: 520px; left: 0; right: 0; bottom: 480px;
+    overflow: hidden;
+  }}
+  /* 内側の画像だけを中心基準でズーム／パンする（窓は固定） */
+  .bg-img {{
     position: absolute; inset: 0;
     background-image: url('{bg_data_url}');
     background-size: cover; background-position: center;
@@ -142,8 +151,8 @@ _CTA_TEMPLATE = """\
   }}
   .cta-line {{
     display: inline;
-    background: #ffffff;
-    color: #111111;
+    background: rgba(20, 18, 14, 0.92);
+    color: #F7F4EC;
     font-size: 68px; font-weight: 900;
     line-height: 2.0;
     padding: 6px 20px;
@@ -154,7 +163,7 @@ _CTA_TEMPLATE = """\
 </style>
 </head>
 <body>
-  <div class="bg" id="bg"></div>
+  <div class="bg" id="bg"><div class="bg-img" id="bg-img"></div></div>
   <div class="cta-center">
     <div class="cta-emoji">👍🔔</div>
     <div style="text-align: center;">
@@ -433,7 +442,7 @@ async def _render_frames_async(
 
                 await page.evaluate(
                     """([localElapsed, sectionDuration, panDir]) => {
-                        const bgEl = document.getElementById('bg');
+                        const bgEl = document.getElementById('bg-img');
                         if (bgEl) {
                             const progress = Math.min(localElapsed / sectionDuration, 1.0);
                             const bgScale = 1.0 + 0.20 * progress;

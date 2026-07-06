@@ -63,28 +63,37 @@ VOICEVOX の話者 ID は `config.py` で設定可能にする。
 背景画像の優先順位（`composer.py` で制御）:
 
 1. `image_url` が指定されている場合: 記事画像をダウンロードして base64 化
-2. `image_url` 未指定または取得失敗の場合: **Stable Diffusion（SD 1.5）でAI生成**
-   - モデル: `runwayml/stable-diffusion-v1-5`（Hugging Face diffusers、ローカル・無料）
-   - 生成サイズ: 576×1024（9:16）→ PIL で 1080×1920 にリサイズ
-   - キャッシュ: `.cache/images/bg_generated.png`
-   - 初回実行時のみモデルダウンロード（~4GB）
-   - `diffusers` 未インストールの場合はスキップして次のフォールバックへ
-3. AI生成も失敗した場合: 暗い青 CSS グラデーション（既存動作）
+2. `image_url` 未指定または取得失敗の場合: **ローカル拡散モデルでAI生成**（各セクションの `bg_prompt` を使用）
+   - モデル: `SD_MODEL_ID`（デフォルト `Lykon/dreamshaper-xl-v2-turbo`）。`AutoPipelineForText2Image` で SD1.5/SDXL 両対応
+   - **SDXL Turbo 系**（ID に `xl` を含む）: 832×704 生成 / 7 steps / cfg 2.0、`enable_model_cpu_offload()` + `vae.enable_slicing()`（8GB VRAM 対応・`.to("cuda")` は使わない）
+   - **SD1.5 系**（従来）: 512×448 生成 / 30 steps / cfg 7.5 に自動で切替
+   - スケジューラはモデル同梱設定を使用（Turbo 系は DPM++ SDE）
+   - 生成後 PIL で `OUTPUT_SIZE`（1080×920）へリサイズし `.cache/images/<run_id>/bg_<i>.png` に保存
+   - 初回のみモデルDL（SDXL Turbo は約7GB）。`diffusers` 未インストール時はスキップして次のフォールバックへ
+3. AI生成も失敗した場合: 背景窓は空（クリーム地）のまま合成を継続する
+
+#### 画面レイアウト（D3 クリーム版）
+
+`visuals.py` の HTML/CSS テンプレート（`_SUBTITLE_TEMPLATE` / `_CTA_TEMPLATE`）で 1080×1920 を構成する。フォントは M PLUS 1p 900。
+
+| 要素 | 仕様 |
+|---|---|
+| 全体背景 | クリーム `#F7F4EC` |
+| タイトル部 | 上部 0〜520px のクリーム紙面（`padding: 150px 56px 0`）。下端に `3px double #1a1a1a` の二重罫線 |
+| タイトル文字 | 黒 `#111` / 100px、キーワードは赤 `#C41E1E`（縁取りなし、`letter-spacing:-1px`） |
+| 背景画像窓 | `top:520px` 〜 `bottom:480px` の帯（Ken Burns で拡大＋パン） |
+| 字幕 | 下部 `bottom:230px`。ダークバンド `rgba(20,18,14,0.92)` + クリーム文字 `#F7F4EC` / 64px、キーワードは金 `#FFD25E` |
+| ruby 注釈 | `rt { color:#cbb98a; background:transparent }`（ダークバンドと調和させる） |
+| CTA（末尾） | 同トーン（クリーム背景 + ダークバンド文字 + 絵文字 👍🔔） |
+| メタ情報 | カテゴリ・日付は表示しない |
 
 #### Ken Burns 効果
 
-`visuals.py` の Playwright レンダリング時に `.bg` 要素のズームを時間経過で変化させる:
+`visuals.py` の Playwright レンダリング時に `.bg`（`#bg` 要素）のズーム・パンを時間経過で変化させる:
 
-- 動画開始時: `transform: scale(1.06)`
-- 動画終了時: `transform: scale(1.14)`
-- 計算式: `scale = 1.06 + 0.08 * (globalTime / totalDuration)`
-- `globalTime` = 動画全体での絶対時刻（セクション開始時刻 + セクション内経過時刻）
-- テキスト: `subtitle_text` を中央寄せで表示
-  - フォント: システムの日本語フォント（`C:/Windows/Fonts/meiryo.ttc` または `YuGothic`）
-  - フォントサイズ: 72px
-  - 色: 白
-- ソース表記: 右下に「Source: {source}」を小さく表示（32px、グレー）
-- 生成した PNG を `.cache/images/<section_index>.png` に保存
+- セクション内ローカル進行で `scale 1.0 → 1.20`
+- パン: `section_start` が偶数秒帯なら右・奇数秒帯なら左（`translate(±40px × progress, -15px × progress)`）
+- 各フレームは moviepy の `VideoClip` にそのまま渡す（セクションごとの PNG 個別保存はしない）
 
 ### ステップ3: 動画合成（moviepy）
 
