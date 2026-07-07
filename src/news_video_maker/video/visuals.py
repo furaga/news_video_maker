@@ -34,7 +34,7 @@ _SUBTITLE_TEMPLATE = """\
   /* 背景画像（クリーム紙面と字幕の間に収まる窓） */
   .bg {{
     position: absolute;
-    top: 520px; left: 0; right: 0; bottom: 480px;
+    top: 560px; left: 0; right: 0; bottom: 480px;
     overflow: hidden;
   }}
   /* 内側の画像だけを中心基準でズーム／パンする（窓は固定） */
@@ -45,10 +45,10 @@ _SUBTITLE_TEMPLATE = """\
     transform: scale(1.0);
     transform-origin: center center;
   }}
-  /* タイトル部（上部クリーム紙面 top:0〜520px、下端に二重罫線） */
+  /* タイトル部（上部クリーム紙面 top:0〜560px、下端に二重罫線） */
   .paper {{
     position: absolute;
-    top: 0; left: 0; right: 0; height: 520px;
+    top: 0; left: 0; right: 0; height: 560px;
     z-index: 20;
     background: #E9DFC7;
     border-bottom: 6px double #1a1a1a;
@@ -127,7 +127,7 @@ _CTA_TEMPLATE = """\
   /* 背景画像（字幕フレームと同じ窓に収めてクリーム紙面と統一） */
   .bg {{
     position: absolute;
-    top: 520px; left: 0; right: 0; bottom: 480px;
+    top: 560px; left: 0; right: 0; bottom: 480px;
     overflow: hidden;
   }}
   /* 内側の画像だけを中心基準でズーム／パンする（窓は固定） */

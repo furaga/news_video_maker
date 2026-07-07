@@ -79,9 +79,9 @@ VOICEVOX の話者 ID は `config.py` で設定可能にする。
 | 要素 | 仕様 |
 |---|---|
 | 全体背景 | クリーム `#F7F4EC` |
-| タイトル部 | 上部 0〜520px のクリーム紙面（`padding: 150px 56px 0`）。下端に `3px double #1a1a1a` の二重罫線 |
+| タイトル部 | 上部 0〜560px のクリーム紙面（`padding: 150px 56px 0`）。下端に `3px double #1a1a1a` の二重罫線 |
 | タイトル文字 | 黒 `#111` / 100px、キーワードは赤 `#C41E1E`（縁取りなし、`letter-spacing:-1px`） |
-| 背景画像窓 | `top:520px` 〜 `bottom:480px` の帯（Ken Burns で拡大＋パン） |
+| 背景画像窓 | `top:560px` 〜 `bottom:480px` の帯（Ken Burns で拡大＋パン） |
 | 字幕 | 下部 `bottom:230px`。ダークバンド `rgba(20,18,14,0.92)` + クリーム文字 `#F7F4EC` / 64px、キーワードは金 `#FFD25E` |
 | ruby 注釈 | `rt { color:#cbb98a; background:transparent }`（ダークバンドと調和させる） |
 | CTA（末尾） | 同トーン（クリーム背景 + ダークバンド文字 + 絵文字 👍🔔） |
