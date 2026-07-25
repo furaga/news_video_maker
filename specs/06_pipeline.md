@@ -95,6 +95,13 @@ usage: run_pipeline.py [--mode MODE] [--dry-run] [--skip-upload] [--from-stage S
 5. Claude Code の出力を標準出力に流す
 6. 終了コードを受け取って返す
 
+### Claude Agent SDK のモデル指定
+
+`src/news_video_maker/pipeline.py` の `ClaudeAgentOptions` で `model="opus"` を明示指定する。
+
+- `opus` は Claude Code のエイリアスで、実行時点の最新 Opus（現状 Claude Opus 5）に解決される
+- `setting_sources=["project"]` のためユーザー設定の model は読み込まれない。scheduler / パイプライン実行でも Opus を使うため、コード側で固定する
+
 ### `.claude/commands/run-pipeline.md`（Claude Code コマンド）
 
 1. `--from-stage` に応じて開始ステージを決定
