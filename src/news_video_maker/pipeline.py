@@ -62,6 +62,7 @@ async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publ
         permission_mode="bypassPermissions",
         setting_sources=["project"],
         max_turns=50,
+        model="opus",
     )
 
     exit_code = 0
