@@ -2,11 +2,13 @@
 
 `.cache/pipeline/02_selected.json` の処理済み論文から、30〜60秒の日本語ナレーション動画用の台本を生成して `.cache/pipeline/03_script.json` に保存する。
 
+**共通ルール**: JSON スキーマの構造、annotations の付け方、bg_prompt の基本ルール（構図・禁止事項・人物の扱い）、display_text の作り方、カタカナ変換・誤読防止などの品質基準は `.claude/commands/generate-script.md` に準拠する。本ファイルには論文向けの差分のみ記載する。
+
 ## 手順
 
 1. Read ツールで `.cache/pipeline/02_selected.json` を読み込む
 
-2. 以下の構成で台本を生成:
+2. 以下の構成で台本を生成（セクションの目的は news 版と異なる）:
 
    | セクション | 目的 | 目標尺 |
    |---|---|---|
@@ -17,42 +19,34 @@
    | `main_4` | 実用面のインパクト・今後の展望（任意） | 7〜10秒（約50〜80文字） |
    | `outro` | まとめ | 4〜5秒（約30〜40文字） |
 
-   **重要**:
-   - セクションを細かく分けることで、各セクション切り替え時にカードアニメーションが発生し、画面に動きが生まれる。
-   - `02_selected.json` に `related_research` フィールドがあれば、その情報を `main_3` や `main_4` に積極的に活用すること。
-   - `outro` には「チャンネル登録」を含めないこと（動画終端のCTAセクションで自動追加される）。
+   セクション細分化の理由・`related_research` の活用・outro に「チャンネル登録」を含めない、は generate-script.md と同じ。
 
 ### hook テクニック（必須）
 
-hook の `narration_text` は以下の4パターンのいずれかで書くこと。**「〇〇が提案されました」のような平叙文は禁止。**
+パターンの種類（数字型・ひっくり返し型・緊迫感型・ループ型）と平叙文禁止のルールは generate-script.md と共通。論文向けの例:
 
-| パターン | 特徴 | 例 |
-|---|---|---|
-| **数字型** | 具体的な数値改善で規模を即伝える | 「ジーピーユーたった2枚で、エーアイ世界ランキング1位をとってしまいました。」 |
-| **ひっくり返し型** | 常識を覆す結果を1文で完結させる | 「モデルの重みを一切変えずに、性能を17パーセント以上あげることができました。」 |
-| **緊迫感型** | 既存手法の限界を強調して問題意識を煽る | 「いまのエーアイには、〇〇という致命的な弱点があります。」 |
-| **ループ型** | 最も驚くべき結果を冒頭に置き、疑問で締める | 「ジーピーユー2枚で世界1位をとった個人開発者がいます。その方法とは。」 |
+| パターン | 例 |
+|---|---|
+| 数字型 | 「ジーピーユーたった2枚で、エーアイ世界ランキング1位をとってしまいました。」 |
+| ひっくり返し型 | 「モデルの重みを一切変えずに、性能を17パーセント以上あげることができました。」 |
+| 緊迫感型 | 「いまのエーアイには、〇〇という致命的な弱点があります。」 |
+| ループ型 | 「ジーピーユー2枚で世界1位をとった個人開発者がいます。その方法とは。」 |
 
-**カリオシティーギャップ（好奇心の隙間）:** hook の最終文は、視聴者が「で、どうやって？」「なぜ？」と感じる形で終わらせる。以下のパターンから選ぶ:
+**カリオシティーギャップ（論文向け追加ルール）**: hook の最終文は、視聴者が「で、どうやって？」「なぜ？」と感じる形で終わらせる。
 - 疑問提示型: 「その方法とは。」「一体どんな仕組みなのか。」
 - 逆説提示型: 「しかし、そのアイデアは全く常識外でした。」
 - 規模強調型: 「一番驚くのはここからです。」
 
 （※「詳細はこのあと」「続きはこのあと」のような表現はショート動画に合わないため禁止）
 
-### セクション間ブリッジ（推奨）
+### セクション間ブリッジ（推奨、論文向け追加ルール）
 
-`main_1` ～ `main_3` の `narration_text` 末尾に、次セクションへの引きとなる1文を加える。
+`main_1`〜`main_3` の `narration_text` 末尾に、次セクションへの引きとなる1文を加える。
+- 例: 「では、その手法の核心とは何か。」「しかし、一番驚くのはここからです。」「実際の性能向上はどれほどだったのか、数字で見てみましょう。」
 
-- 例: 「では、その手法の核心とは何か。」
-- 例: 「しかし、一番驚くのはここからです。」
-- 例: 「実際の性能向上はどれほどだったのか、数字で見てみましょう。」
+3. 文字数から尺を推定（約7〜8文字/秒）し、合計が25〜60秒に収まるよう調整する（60秒超・25秒未満のときの再生成ルールは generate-script.md と同じ、1回まで）
 
-3. 文字数から尺を推定（約7〜8文字/秒）し、合計が25〜60秒に収まるよう調整する
-   - 60秒超 → 各 `main_*` セクションを短縮して再生成（1回まで）
-   - 25秒未満 → 各 `main_*` セクションに情報を補足して再生成（1回まで）
-
-4. Write ツールで `.cache/pipeline/03_script.json` に以下のスキーマで保存（**すべてのフィールドは必須。特に `image_url`、`bg_prompt`、`display_text`、`annotations` を忘れないこと**）:
+4. Write ツールで `.cache/pipeline/03_script.json` に保存（フィールドの意味は generate-script.md 参照。**すべて必須**）:
 
 ```json
 {
@@ -61,93 +55,30 @@ hook の `narration_text` は以下の4パターンのいずれかで書くこ�
   "image_url": "",
   "total_duration_sec": 45.0,
   "sections": [
-    {
-      "type": "hook",
-      "narration_text": "VOICEVOX で読み上げるナレーション本文（カタカナ読み・ひらがな誤読防止）",
-      "display_text": "画面字幕表示用（原語表記 + **キーワード** マークアップ）",
-      "subtitle_text": "要点のみ（25文字以内）",
-      "bg_prompt": "具体的な物体・場所を英語で記述したSD用プロンプト（下記ガイドライン参照）",
-      "annotations": {},
-      "estimated_duration_sec": 5.0
-    },
-    {
-      "type": "main_1",
-      "narration_text": "...",
-      "display_text": "...",
-      "subtitle_text": "...",
-      "bg_prompt": "...",
-      "annotations": {"LLM": "大規模言語モデル"},
-      "estimated_duration_sec": 9.0
-    },
-    {
-      "type": "main_2",
-      "narration_text": "...",
-      "display_text": "...",
-      "subtitle_text": "...",
-      "bg_prompt": "...",
-      "annotations": {},
-      "estimated_duration_sec": 9.0
-    },
-    {
-      "type": "main_3",
-      "narration_text": "...",
-      "display_text": "...",
-      "subtitle_text": "...",
-      "bg_prompt": "...",
-      "annotations": {},
-      "estimated_duration_sec": 9.0
-    },
-    {
-      "type": "outro",
-      "narration_text": "まとめのナレーション（「チャンネル登録」は含めない）",
-      "display_text": "...",
-      "subtitle_text": "...",
-      "bg_prompt": "...",
-      "annotations": {},
-      "estimated_duration_sec": 5.0
-    }
+    { "type": "hook", "narration_text": "...", "display_text": "...", "subtitle_text": "...", "bg_prompt": "...", "annotations": {}, "estimated_duration_sec": 5.0 },
+    { "type": "main_1", "narration_text": "...", "display_text": "...", "subtitle_text": "...", "bg_prompt": "...", "annotations": {"LLM": "大規模言語モデル"}, "estimated_duration_sec": 9.0 },
+    { "type": "main_2", "narration_text": "...", "display_text": "...", "subtitle_text": "...", "bg_prompt": "...", "annotations": {}, "estimated_duration_sec": 9.0 },
+    { "type": "main_3", "narration_text": "...", "display_text": "...", "subtitle_text": "...", "bg_prompt": "...", "annotations": {}, "estimated_duration_sec": 9.0 },
+    { "type": "outro", "narration_text": "まとめのナレーション（「チャンネル登録」は含めない）", "display_text": "...", "subtitle_text": "...", "bg_prompt": "...", "annotations": {}, "estimated_duration_sec": 5.0 }
   ]
 }
 ```
 
-### annotations ガイドライン
+`image_url` は論文には記事画像がないため常に空文字。`source_url` は arXiv の URL。
 
-各セクションの `annotations` に、字幕中の専門用語・略称・固有名詞の簡潔な説明を記述する。
+### bg_prompt の抽象概念変換（論文向け）
 
-**ルール:**
-- キーは `display_text` 内の `**keyword**` マークアップで囲まれた用語と一致させる
-- 値は日本語で簡潔な説明（10文字以内目安）
-- 略称の正式名称や、一般視聴者が知らない可能性がある専門用語のみ対象
-- 一般的に知られている用語（AI、Google、YouTube など）や一般的な日本語には不要
-- 同じ用語が複数セクションに出る場合、初出セクションのみに付ける（2回目以降は空の `{}` でよい）
+構図・照明・禁止事項（広い風景やパノラマ禁止）・人物の扱いは generate-script.md の bg_prompt ガイドラインに準拠。論文特有の変換例:
 
-### bg_prompt ガイドライン
-
-各セクションの `bg_prompt` に、そのセリフの内容を視覚的に表現する **Stable Diffusion 向け英語プロンプト** を生成する。
-
-**ルール:**
-- **構図（最重要）**: メインの被写体が画面の50%以上を占めるクローズアップ・中望遠で撮影すること。必ず `close-up shot` または `macro photography` を指定する
-- 具体的な物体・場所・人工物を英語で記述する（例: `glowing neural network visualization, close-up, multiple layers of nodes, blue light`）
-- 照明・アングルを指定する（例: `soft ambient lighting, close-up, eye-level shot`）
-- 末尾に必ず `photorealistic, 8k, cinematic, no text` を追加する
-- 抽象的な概念は視覚的なオブジェクトに変換する:
-  - 「推論高速化」→ `server rack with glowing blue lights, close-up, shallow depth of field`
-  - 「精度向上」→ `target with bullseye, close-up, precision instruments`
-  - 「学習・訓練」→ `computer screen showing training curves, close-up, neural network diagram`
-  - 「ロボット制御」→ `robotic arm on laboratory table, close-up, mechanical joints`
-  - 「自然言語処理」→ `computer screen with code, close-up, soft glow`
-- 日本語キーワードをそのまま入れない（SD は日本語が苦手）
-- **禁止**: 広い風景、パノラマ、俯瞰、都市遠景、skyline、aerial view は使わない。必ず具体的な被写体にフォーカスすること
-  - BAD: `futuristic laboratory panoramic view, wide establishing shot`
-  - GOOD: `robotic arm gripping a small object, close-up, studio lighting`
-- **人物の活用（推奨）**: 人物を含めると視覚的インパクトが高まる。ただし顔のクローズアップは避け、後ろ姿・手元・シルエットなど部分的な描写を推奨する（SDの人体描画品質の制約のため）
-  - GOOD: `researcher's hands typing on keyboard with neural network on screen, close-up shot`
-  - GOOD: `silhouette of scientist standing before holographic data display, close-up shot`
-  - BAD: `portrait of researcher smiling at camera`
+- 「推論高速化」→ `server rack with glowing blue lights, close-up, shallow depth of field`
+- 「精度向上」→ `target with bullseye, close-up, precision instruments`
+- 「学習・訓練」→ `computer screen showing training curves, close-up, neural network diagram`
+- 「ロボット制御」→ `robotic arm on laboratory table, close-up, mechanical joints`
+- 「自然言語処理」→ `computer screen with code, close-up, soft glow`
 
 ## タイトル生成ガイドライン
 
-YouTubeショートで伸びやすい論文向けフック型タイトルを生成すること。
+YouTubeショートで伸びやすい論文向けフック型タイトルを生成する（news 版のような数字・大企業訴求ではなく、技術的インパクトそのものを主役にする）。
 
 **フォーマット例（30文字以内の本文）:**
 - `「**LLM**の推論が27倍速くなる」` → 数値インパクト
@@ -159,32 +90,12 @@ YouTubeショートで伸びやすい論文向けフック型タイトルを生�
 **避けるべきタイトル:**
 - 論文タイトルの直訳（難解・長い）
 - 説明的すぎるタイトル（「〇〇チームが〇〇という手法を提案しました」）
-- **30文字超えるタイトル本文**
+- **30文字超のタイトル本文**
 
-**タイトルのキーワードマークアップ:**
-- `title` フィールドにも `**keyword**` マークアップで強調したい単語を1〜2個指定する
-- 技術分野名・手法名など動画の核心となる用語を優先する
-- `**...**` マークアップは動画の画面上タイトル表示（黄色強調）専用。YouTubeへのアップロード時は自動的に除去される。
+**タイトルのキーワードマークアップ**: generate-script.md と同じルール（`**keyword**` を1〜2個、アップロード時に自動除去）。技術分野名・手法名を優先してマークアップする。
 
 ## 品質基準
 
-- 自然な日本語の話し言葉（「〜です」「〜ます」調）
-- 専門用語は分かりやすく言い換えるか括弧で補足
-- `subtitle_text` は `narration_text` の要点のみ（25文字以内目安）
-- `narration_text` に含まれるアルファベット・固有名詞は例外なくカタカナ読みで記述する
-  （例: API → エーピーアイ、LLM → エルエルエム、GPU → ジーピーユー、
-       Transformer → トランスフォーマー、arXiv → アーカイブ、
-       RLHF → アールエルエイチエフ、LoRA → ローラ）
-- VOICEVOXがアルファベットを正しく読めるか保証できないため、原則すべてカタカナ変換する
-- `narration_text` では、VOICEVOXが誤読しやすい漢字はひらがなで記述する
+自然な話し言葉・カタカナ変換・誤読防止のひらがな化・display_text の作り方は generate-script.md の品質基準に準拠する。論文特有語彙のカタカナ変換を追加:
 
-### display_text ガイドライン
-
-`display_text` は画面上の字幕として表示されるテキスト。以下のルールで生成する:
-
-- `narration_text` と同じ意味・構成だが、カタカナ読みを元の表記に戻す
-  （例: トランスフォーマー → Transformer、アーカイブ → arXiv、ローラ → LoRA）
-- 視聴者に強調したいキーワード（技術名・数値・驚きのポイント）を `**keyword**` でマークアップする
-- 1セクション内の `**keyword**` は2〜3個以内にとどめる（強調しすぎない）
-- 漢字の読み仮名（ひらがな化）は不要（表示用なので読みやすい漢字でよい）
-- `narration_text` との文字数差は ±20% 以内に収める（尺の推定に影響するため）
+（例: LLM → エルエルエム、Transformer → トランスフォーマー、arXiv → アーカイブ、RLHF → アールエルエイチエフ、LoRA → ローラ）
