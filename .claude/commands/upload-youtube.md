@@ -28,10 +28,10 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 以下を実行してコメントを投稿する（`VIDEO_ID` はアップロード結果から取得した値）:
 
 ```bash
-cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id VIDEO_ID --comment-file .cache/pipeline/05_comment.txt
+cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python scripts/post_comments.py --video-id VIDEO_ID --comment-file .cache/pipeline/05_comment.txt --title "動画タイトル"
 ```
 
-> **仕組み**: コメント本文は `.cache/pipeline/05_comment.txt` から直接読み込まれる。非公開・スケジュール公開動画は一時的に限定公開→コメント投稿→元の状態に自動復元される。投稿成功後、スクリプトが自動的に `.cache/youtube_comments.md` の該当エントリの URL を更新する。
+> **仕組み**: コメント本文は `.cache/pipeline/05_comment.txt` から直接読み込まれる。非公開・スケジュール公開動画は一時的に限定公開→コメント投稿→元の状態に自動復元される。投稿成功後、スクリプトが自動的に `.cache/youtube_comments.md` に「タイトル・URL・生成日・本文」のエントリを追記する（同じ URL があれば追記しない）。`--title` は `03_script.json` の `title` を渡す。
 
 実行結果（コメントID or エラー）を報告する。
 

@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import time
+from datetime import date
 from pathlib import Path
 
 import google.auth.transport.requests
@@ -104,6 +105,28 @@ def update_comments_file_url(path: Path, video_id: str, comment_text: str) -> bo
     return updated
 
 
+def append_comments_file(path: Path, video_id: str, title: str, comment_text: str) -> bool:
+    """投稿済みコメントを youtube_comments.md に追記する。同じ URL が既にあれば追記しない。"""
+    url = f"https://youtu.be/{video_id}"
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    if url in existing:
+        logger.info("youtube_comments.md に %s は記録済みのため追記しません", url)
+        return False
+
+    entry = (
+        f"## {title}\n"
+        f"URL: {url}\n"
+        f"生成日: {date.today().isoformat()}\n\n"
+        f"{comment_text.strip()}\n\n---\n"
+    )
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(existing + entry, encoding="utf-8")
+    logger.info("youtube_comments.md に追記: %s", url)
+    return True
+
+
 def authenticate():
     creds = None
     if TOKEN_PATH.exists():
@@ -171,6 +194,8 @@ def main():
     parser.add_argument("--video-id", required=True, help="対象動画ID（必須）")
     parser.add_argument("--comment-file", type=str, default=None,
                         help="コメントテキストファイルのパス（指定時はyoutube_comments.mdの検索をスキップ）")
+    parser.add_argument("--title", type=str, default="",
+                        help="動画タイトル（--comment-file 指定時、投稿後に youtube_comments.md へ記録する際の見出し）")
     args = parser.parse_args()
 
     video_id = args.video_id
@@ -230,8 +255,11 @@ def main():
         try:
             comment_id = post_comment(youtube, video_id, text)
             logger.info("コメント投稿完了: %s → comment_id: %s", url, comment_id)
-            # youtube_comments.md の（未アップロード）エントリを自動更新
-            if COMMENTS_FILE.exists():
+            if args.comment_file:
+                # --comment-file 経由の投稿は youtube_comments.md に新規エントリとして記録する
+                append_comments_file(COMMENTS_FILE, video_id, args.title or video_id, text)
+            elif COMMENTS_FILE.exists():
+                # youtube_comments.md 由来の投稿は（未アップロード）エントリの URL を更新する
                 update_comments_file_url(COMMENTS_FILE, video_id, text)
         finally:
             logger.info("元の状態に復元中: %s", url)

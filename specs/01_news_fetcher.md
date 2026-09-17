@@ -58,6 +58,12 @@ Python（feedparser + httpx）
   1. feedparser の `media:thumbnail` / `media:content` / `enclosures`
   2. `full_text` 取得済みの場合は HTML 内の `og:image` メタタグ
 
+**選定用インデックス**: `.cache/pipeline/01_articles_index.json`
+
+`01_articles.json` と同じ順序・同じスキーマから `full_text` だけを除いたもの。`full_text` は生 HTML の断片で
+1件あたり最大 3000 文字あり LLM の選定・要約には使わないため、後続の `/process` はこちらを読み込む
+（`specs/02_content_processor.md`）。`01_articles.json` はデバッグ・`og:image` 抽出用にそのまま保存する。
+
 ---
 
 ## データモデル
@@ -92,6 +98,7 @@ class NewsArticle:
 5. `summary_text` が 200 文字未満なら httpx で本文取得を試みる（タイムアウト: 10秒）
 6. `published_at` 降順でソート
 7. 上位 `max_articles` 件を `.cache/pipeline/01_articles.json` に保存
+8. 同じ内容から `full_text` を除いたものを `.cache/pipeline/01_articles_index.json` に保存
 
 ---
 

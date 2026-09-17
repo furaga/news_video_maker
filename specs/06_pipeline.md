@@ -25,7 +25,7 @@ Claude Code CLI
   ↓ .claude/commands/ の各コマンドを順次実行
 
   --mode news（デフォルト）:
-  1. /fetch-news    → .cache/pipeline/01_articles.json
+  1. /fetch-news    → .cache/pipeline/01_articles.json + 01_articles_index.json
   2. /process       → .cache/pipeline/02_selected.json
   3. /gen-script    → .cache/pipeline/03_script.json
 
@@ -74,6 +74,7 @@ usage: run_pipeline.py [--mode MODE] [--dry-run] [--skip-upload] [--from-stage S
 | ファイル | 内容 |
 |---|---|
 | `.cache/pipeline/01_articles.json` | 取得記事一覧（news モード） |
+| `.cache/pipeline/01_articles_index.json` | 取得記事一覧から `full_text` を除いた選定用インデックス（news モード） |
 | `.cache/pipeline/01_papers.json` | 取得論文一覧（paper モード） |
 | `.cache/pipeline/02_selected.json` | 選定・要約済みコンテンツ（モード共通スキーマ） |
 | `.cache/pipeline/03_script.json` | 台本 |
@@ -102,10 +103,39 @@ usage: run_pipeline.py [--mode MODE] [--dry-run] [--skip-upload] [--from-stage S
 - `opus` は Claude Code のエイリアスで、実行時点の最新 Opus（現状 Claude Opus 5）に解決される
 - `setting_sources=["project"]` のためユーザー設定の model は読み込まれない。scheduler / パイプライン実行でも Opus を使うため、コード側で固定する
 
+### トークン効率化: サブエージェントによるステージ別モデル切替
+
+パイプラインは 1 セッションで全ステージを順次実行する（ワークフローは変えない）。そのうえで、
+品質への影響が小さく入力が大きいステージは `ClaudeAgentOptions.agents` で定義した
+**サブエージェント**に委譲し、軽いモデルで実行する。
+
+| サブエージェント | 担当ステージ | model | プロンプト | tools |
+|---|---|---|---|---|
+| `article-selector` | 2 選定・日本語要約（news） | `sonnet` | `.claude/commands/process-article.md` | Read, Write, WebSearch |
+| `paper-selector` | 2 選定・日本語要約（paper） | `sonnet` | `.claude/commands/process-paper.md` | Read, Write, WebSearch |
+| `video-checker` | 4.6 視覚チェック | `haiku` | `.claude/commands/validate-video.md` | Read, Write, Glob |
+| `metadata-writer` | 5-1 メタデータ + 投稿者コメント生成 | `sonnet` | `.claude/commands/generate-metadata.md` | Read, Write, WebSearch, WebFetch |
+
+- 台本生成（ステージ3）は動画の品質を直接決めるため親セッション（opus）のまま
+- ステージ2は記事一覧・history・WebSearch 結果と入力が大きいため委譲する。倫理方針を含むスコアリング判断があるため haiku ではなく sonnet を使う（サブエージェント内で完結するため、モデル差による費用差は数セント）
+- サブエージェントのプロンプトは対応するコマンドファイルを `pipeline.py` が起動時に読み込んで渡す（コマンドファイルが単一の正）。先頭に「`.cache/pipeline/` を `.cache/pipeline/{run_id}/` に読み替える」旨の前置きを付ける
+- 親セッションは Agent ツールで `subagent_type` と run_id を含む短い prompt を渡すだけで、フレーム画像・WebSearch 結果・WebFetch 結果を自分のコンテキストに載せない
+- 効果: モデル単価の差に加え、サブエージェントの入出力が親（opus）の以降の全ターンで再送されなくなる
+
+### トークン効率化: 親セッションに載せない入力
+
+- `01_articles.json` は `full_text`（生 HTML 断片）を含み数十KB になるため親セッションでは Read しない。選定は fetcher が出力する `01_articles_index.json`（`full_text` を除いた同一スキーマ）を用いる（`specs/01_news_fetcher.md`, `specs/02_content_processor.md`）
+- `.cache/youtube_comments.md`（投稿済みコメントの記録。実行のたびに肥大化する）は LLM が読み書きしない。LLM は `05_comment.txt` のみ書き、投稿成功後に `scripts/post_comments.py` が `--title` で渡された動画タイトルと URL を付けて追記する（同じ URL があれば追記しない）
+
+### 使用トークンのログ
+
+`pipeline.py` は `ResultMessage.usage` を `[Usage] in=... cache_w=... cache_r=... out=...` の形式で
+`logs/<yyyymmdd>/pipeline_<run_id>.log` に出力する（改善前後の比較用）。
+
 ### `.claude/commands/run-pipeline.md`（Claude Code コマンド）
 
 1. `--from-stage` に応じて開始ステージを決定
-2. 各ステージを順次実行（Bash ツールまたは他コマンドの呼び出し）
+2. 各ステージを順次実行（Bash ツール、他コマンドの呼び出し、またはサブエージェントへの委譲）
 3. 各ステージの成否を確認して次に進む
 4. `--dry-run` の場合は upload をスキップ
 5. 最後に `report.md` を生成
@@ -121,7 +151,7 @@ usage: run_pipeline.py [--mode MODE] [--dry-run] [--skip-upload] [--from-stage S
 | `--from-stage` | 必要な入力ファイル |
 |---|---|
 | `1` (fetch) | なし |
-| `2` (process) | `01_articles.json`（news）または `01_papers.json`（paper） |
+| `2` (process) | `01_articles_index.json`（news）または `01_papers.json`（paper） |
 | `3` (script) | `02_selected.json` |
 | `4` (video) | `03_script.json` |
 | `5` (upload) | `04_video_path.txt`, `02_selected.json`, `03_script.json` |

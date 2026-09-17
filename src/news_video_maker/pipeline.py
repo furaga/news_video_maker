@@ -7,6 +7,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import anyio
 from claude_agent_sdk import (
+    AgentDefinition,
     AssistantMessage,
     ClaudeAgentOptions,
     ResultMessage,
@@ -16,6 +17,55 @@ from claude_agent_sdk import (
 from claude_agent_sdk.types import TextBlock, ToolUseBlock
 
 PROJECT_DIR = str(__file__.replace("\\", "/").split("src/")[0].rstrip("/"))
+COMMANDS_DIR = os.path.join(PROJECT_DIR, ".claude", "commands")
+
+# サブエージェント共通の前置き。コマンドファイル中の `.cache/pipeline/` パスを run_id 配下に読み替えさせる
+_SUBAGENT_PREAMBLE = (
+    "あなたはニュース動画パイプラインの1ステージを担当するサブエージェントです。\n"
+    "呼び出し元から run_id が渡されるので、以下の手順中の `.cache/pipeline/` は "
+    "`.cache/pipeline/{run_id}/` に読み替えて実行してください。\n"
+    "手順を完了したら、結果の要点（生成したファイルのパスと OK/NG）だけを短く報告してください。\n\n---\n\n"
+)
+
+
+def _load_command(name: str) -> str:
+    """`.claude/commands/<name>.md` をサブエージェントのプロンプトとして読み込む"""
+    with open(os.path.join(COMMANDS_DIR, f"{name}.md"), encoding="utf-8") as f:
+        return _SUBAGENT_PREAMBLE + f.read()
+
+
+def _build_subagents() -> dict[str, AgentDefinition]:
+    """軽いモデルで実行するステージをサブエージェントとして定義する。
+
+    サブエージェントのコンテキスト（画像・WebSearch 結果など）は親セッションに戻らないため、
+    モデル単価の削減に加えて、親（opus）の以降のターンで再送されるトークンも減る。
+    """
+    return {
+        "article-selector": AgentDefinition(
+            description="記事一覧から1件を選定し日本語要約と関連調査を 02_selected.json に保存する（news モード）",
+            prompt=_load_command("process-article"),
+            tools=["Read", "Write", "WebSearch"],
+            model="sonnet",
+        ),
+        "paper-selector": AgentDefinition(
+            description="論文一覧から1件を選定し日本語要約と関連調査を 02_selected.json に保存する（paper モード）",
+            prompt=_load_command("process-paper"),
+            tools=["Read", "Write", "WebSearch"],
+            model="sonnet",
+        ),
+        "video-checker": AgentDefinition(
+            description="動画フレーム画像を目視確認して visual_check を 04_validation.json に追記する",
+            prompt=_load_command("validate-video"),
+            tools=["Read", "Write", "Glob"],
+            model="haiku",
+        ),
+        "metadata-writer": AgentDefinition(
+            description="YouTube 投稿用メタデータ (05_metadata.json) と投稿者コメント (05_comment.txt) を生成する",
+            prompt=_load_command("generate-metadata"),
+            tools=["Read", "Write", "WebSearch", "WebFetch"],
+            model="sonnet",
+        ),
+    }
 
 
 def _log(msg: str, file) -> None:
@@ -23,6 +73,18 @@ def _log(msg: str, file) -> None:
     line = f"[{ts}] {msg}"
     print(line, flush=True)
     print(line, file=file, flush=True)
+
+
+def _format_usage(usage: dict | None) -> str:
+    """ResultMessage.usage をログ用に整形する（before/after 比較のため）"""
+    if not usage:
+        return "usage=n/a"
+    return (
+        f"in={usage.get('input_tokens', 0)} "
+        f"cache_w={usage.get('cache_creation_input_tokens', 0)} "
+        f"cache_r={usage.get('cache_read_input_tokens', 0)} "
+        f"out={usage.get('output_tokens', 0)}"
+    )
 
 
 def _summarize_tool_input(name: str, inp: dict) -> str:
@@ -58,11 +120,12 @@ async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publ
 
     options = ClaudeAgentOptions(
         cwd=PROJECT_DIR,
-        allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+        allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "Agent"],
         permission_mode="bypassPermissions",
         setting_sources=["project"],
         max_turns=50,
         model="opus",
+        agents=_build_subagents(),
     )
 
     exit_code = 0
@@ -86,6 +149,7 @@ async def run(dry_run: bool = False, from_stage: int = 1, run_id: str = "", publ
                 cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd else "n/a"
                 secs = message.duration_ms // 1000
                 _log(f"[Done]   status={status} turns={message.num_turns} cost={cost} time={secs}s", log_file)
+                _log(f"[Usage]  {_format_usage(message.usage)}", log_file)
                 if message.result:
                     print(message.result, flush=True)
     except Exception as e:
