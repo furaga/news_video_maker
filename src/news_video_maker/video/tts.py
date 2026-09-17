@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 RETRY_WAIT = 1.0
 
-VOICEVOX_EXE = r"C:\Users\furag\AppData\Local\Programs\VOICEVOX\VOICEVOX.exe"
+VOICEVOX_EXE = r"C:\Users\furag\AppData\Local\Microsoft\WinGet\Packages\HiroshibaKazuyuki.VOICEVOX_Microsoft.Winget.Source_8wekyb3d8bbwe\VOICEVOX\VOICEVOX.exe"
 VOICEVOX_STARTUP_TIMEOUT = 60   # seconds
 VOICEVOX_STARTUP_POLL = 2       # seconds
 
