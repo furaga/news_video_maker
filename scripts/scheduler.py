@@ -151,7 +151,7 @@ def _find_missing_slots(
 
 # --- パイプライン実行 ---------------------------------------------------------
 
-def _run_pipeline_for_slot(slot_utc: datetime, mode: str, dry_run: bool) -> None:
+def _run_pipeline_for_slot(slot_utc: datetime, mode: str, dry_run: bool, engine: str = "claude") -> bool:
     """欠落スロットに対してパイプラインを実行する"""
     publish_at = slot_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
     slot_jst = slot_utc.astimezone(_JST).strftime("%Y-%m-%d %H:%M JST")
@@ -162,6 +162,7 @@ def _run_pipeline_for_slot(slot_utc: datetime, mode: str, dry_run: bool) -> None
         str(PROJECT_DIR / "scripts" / "run_pipeline.py"),
         "--publish-at", publish_at,
         "--mode", mode,
+        "--engine", engine,
     ]
     if dry_run:
         cmd.append("--dry-run")
@@ -169,7 +170,7 @@ def _run_pipeline_for_slot(slot_utc: datetime, mode: str, dry_run: bool) -> None
     logger.info("コマンド: %s", " ".join(cmd))
     if dry_run:
         logger.info("[dry-run] 実際には実行しません")
-        return
+        return True
 
     result = subprocess.run(cmd, cwd=str(PROJECT_DIR))
     if result.returncode != 0:
@@ -178,11 +179,12 @@ def _run_pipeline_for_slot(slot_utc: datetime, mode: str, dry_run: bool) -> None
             "パイプライン失敗",
             f"{slot_jst} の動画生成に失敗しました (code={result.returncode})",
         )
+    return result.returncode == 0
 
 
 # --- メインロジック -----------------------------------------------------------
 
-def check_and_fill(config: dict, dry_run: bool) -> None:
+def check_and_fill(config: dict, dry_run: bool, engine: str = "claude") -> bool:
     """一回分のチェックと補完を実行する"""
     sched_cfg = config["schedule"]
     publish_times: list[str] = sched_cfg["publish_times"]
@@ -201,14 +203,18 @@ def check_and_fill(config: dict, dry_run: bool) -> None:
     for m in missing:
         logger.info("  - %s", m.astimezone(_JST).strftime("%Y-%m-%d %H:%M JST"))
 
+    success = True
     for slot in missing:
-        _run_pipeline_for_slot(slot, mode, dry_run)
+        if not _run_pipeline_for_slot(slot, mode, dry_run, engine):
+            success = False
+    return success
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="YouTube スケジュール補完スクリプト"
     )
+    parser.add_argument("--engine", choices=["claude", "codex"], default="claude")
     parser.add_argument(
         "--config",
         default="config/schedule.yml",
@@ -239,12 +245,12 @@ def main():
     interval_minutes: int = config.get("scheduler", {}).get("check_interval_minutes", 60)
 
     if args.once or not args.daemon:
-        check_and_fill(config, args.dry_run)
+        sys.exit(0 if check_and_fill(config, args.dry_run, args.engine) else 1)
     else:
         logger.info("daemonモード開始 (interval=%d分)", interval_minutes)
         while True:
             try:
-                check_and_fill(config, args.dry_run)
+                check_and_fill(config, args.dry_run, args.engine)
             except Exception as e:
                 logger.error("チェック中にエラーが発生しました: %s", e, exc_info=True)
                 _notify_error("スケジューラーエラー", str(e))

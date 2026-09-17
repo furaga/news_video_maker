@@ -5,8 +5,6 @@ from datetime import datetime, timedelta, timezone
 
 import anyio
 
-from news_video_maker.pipeline import run
-
 _JST = timezone(timedelta(hours=9))
 
 
@@ -24,6 +22,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="ニュース動画自動生成・YouTube投稿パイプライン"
     )
+    parser.add_argument("--engine", choices=["claude", "codex"], default="claude")
     parser.add_argument(
         "--dry-run",
         "--skip-upload",
@@ -62,6 +61,10 @@ def main():
         help="実行モード: news（デフォルト）または paper",
     )
     args = parser.parse_args()
+    if args.engine == "codex":
+        from news_video_maker.pipeline_codex import run
+    else:
+        from news_video_maker.pipeline import run
 
     if args.publish_at:
         publish_at = args.publish_at
