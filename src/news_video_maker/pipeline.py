@@ -41,6 +41,18 @@ def _build_subagents() -> dict[str, AgentDefinition]:
     モデル単価の削減に加えて、親（opus）の以降のターンで再送されるトークンも減る。
     """
     return {
+        "article-selector": AgentDefinition(
+            description="記事一覧から1件を選定し日本語要約と関連調査を 02_selected.json に保存する（news モード）",
+            prompt=_load_command("process-article"),
+            tools=["Read", "Write", "WebSearch"],
+            model="sonnet",
+        ),
+        "paper-selector": AgentDefinition(
+            description="論文一覧から1件を選定し日本語要約と関連調査を 02_selected.json に保存する（paper モード）",
+            prompt=_load_command("process-paper"),
+            tools=["Read", "Write", "WebSearch"],
+            model="sonnet",
+        ),
         "video-checker": AgentDefinition(
             description="動画フレーム画像を目視確認して visual_check を 04_validation.json に追記する",
             prompt=_load_command("validate-video"),

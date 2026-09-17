@@ -111,10 +111,13 @@ usage: run_pipeline.py [--mode MODE] [--dry-run] [--skip-upload] [--from-stage S
 
 | サブエージェント | 担当ステージ | model | プロンプト | tools |
 |---|---|---|---|---|
+| `article-selector` | 2 選定・日本語要約（news） | `sonnet` | `.claude/commands/process-article.md` | Read, Write, WebSearch |
+| `paper-selector` | 2 選定・日本語要約（paper） | `sonnet` | `.claude/commands/process-paper.md` | Read, Write, WebSearch |
 | `video-checker` | 4.6 視覚チェック | `haiku` | `.claude/commands/validate-video.md` | Read, Write, Glob |
 | `metadata-writer` | 5-1 メタデータ + 投稿者コメント生成 | `sonnet` | `.claude/commands/generate-metadata.md` | Read, Write, WebSearch, WebFetch |
 
-- 選定・要約（ステージ2）と台本生成（ステージ3）は品質・倫理方針が効くため親セッション（opus）のまま
+- 台本生成（ステージ3）は動画の品質を直接決めるため親セッション（opus）のまま
+- ステージ2は記事一覧・history・WebSearch 結果と入力が大きいため委譲する。倫理方針を含むスコアリング判断があるため haiku ではなく sonnet を使う（サブエージェント内で完結するため、モデル差による費用差は数セント）
 - サブエージェントのプロンプトは対応するコマンドファイルを `pipeline.py` が起動時に読み込んで渡す（コマンドファイルが単一の正）。先頭に「`.cache/pipeline/` を `.cache/pipeline/{run_id}/` に読み替える」旨の前置きを付ける
 - 親セッションは Agent ツールで `subagent_type` と run_id を含む短い prompt を渡すだけで、フレーム画像・WebSearch 結果・WebFetch 結果を自分のコンテキストに載せない
 - 効果: モデル単価の差に加え、サブエージェントの入出力が親（opus）の以降の全ターンで再送されなくなる

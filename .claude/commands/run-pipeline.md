@@ -43,8 +43,13 @@ cd /c/Users/furag/Documents/prog/python/news_video_maker && uv run python -m new
 
 `--from-stage` が 2 以下の場合、以下を実行:
 
-- **`--mode news` の場合**: `.claude/commands/process-article.md` の手順1以降にそのまま従う（入力 `.cache/pipeline/{run_id}/01_articles_index.json`、出力 `.cache/pipeline/{run_id}/02_selected.json`。パスのみ `{run_id}` 配下に読み替える）
-- **`--mode paper` の場合**: `.claude/commands/process-paper.md` の手順1a以降にそのまま従う（入力 `.cache/pipeline/{run_id}/01_papers.json`、出力 `.cache/pipeline/{run_id}/02_selected.json`。パスのみ `{run_id}` 配下に読み替える）
+Agent ツールでサブエージェント（軽量モデル）に委譲する。自分で記事一覧・`history.json` を Read したり WebSearch したりしないこと（記事一覧と検索結果を親セッションのコンテキストに載せないため）。
+
+- **`--mode news` の場合**: `subagent_type`: `article-selector`
+  - `prompt`: `run_id={run_id}。.cache/pipeline/{run_id}/01_articles_index.json から記事を1件選定し、.cache/pipeline/{run_id}/02_selected.json に保存してください。`
+- **`--mode paper` の場合**: `subagent_type`: `paper-selector`
+  - `prompt`: `run_id={run_id}。.cache/pipeline/{run_id}/01_papers.json から論文を1件選定し、.cache/pipeline/{run_id}/02_selected.json に保存してください。`
+- 完了後、`.cache/pipeline/{run_id}/02_selected.json` が存在することを Bash の `test -f` で確認する（内容はステージ3で Read する）
 
 スコアリング基準・倫理方針・出力スキーマは常に参照先コマンドファイルを正とする（本ファイルには複製しない）。
 
