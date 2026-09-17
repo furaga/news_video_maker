@@ -1,6 +1,7 @@
 # /fetch-news
 
 RSSフィードから最新のテックニュース記事を取得して `.cache/pipeline/01_articles.json` に保存する。
+同時に、選定用の軽量版（`full_text` を除いたもの）を `.cache/pipeline/01_articles_index.json` に保存する。
 
 ## 手順
 

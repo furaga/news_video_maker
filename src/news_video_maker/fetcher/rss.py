@@ -187,6 +187,12 @@ def save_articles(articles: list[NewsArticle], path: Path) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("%d 件の記事を %s に保存しました", len(articles), path)
 
+    # LLM の選定用に full_text（生 HTML 断片で数十KB になる）を除いた軽量版を別途保存する
+    index_path = path.with_name("01_articles_index.json")
+    index = [{k: v for k, v in a.items() if k != "full_text"} for a in data]
+    index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+    logger.info("選定用インデックスを %s に保存しました", index_path)
+
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

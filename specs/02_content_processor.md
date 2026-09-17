@@ -16,7 +16,9 @@ Claude Code（LLM処理）
 
 ## 入力
 
-**ファイル**: `.cache/pipeline/01_articles.json`（`specs/01_news_fetcher.md` の出力）
+**ファイル**: `.cache/pipeline/01_articles_index.json`（`specs/01_news_fetcher.md` の出力。`01_articles.json` から `full_text` を除いたもの）
+
+`01_articles.json` は読み込まない（`full_text` が生 HTML 断片で数十KB になり、LLM のコンテキストを圧迫するため）。
 
 ---
 
@@ -74,7 +76,7 @@ class ProcessedArticle:
 
 ### ステップ1: 記事のスコアリング
 
-`01_articles.json` の全記事タイトルと要約（先頭 300 文字）を読み込み、Claude が以下の観点で 1〜10 でスコアを付ける:
+`01_articles_index.json` の全記事タイトルと要約（先頭 300 文字）を読み込み、Claude が以下の観点で 1〜10 でスコアを付ける:
 
 **倫理方針（最優先）**: 特定の企業・個人を貶める、不祥事や失敗を面白がる、事実を煽情的に誇張する論調でしか成立しない記事は選ばない。ネガティブな出来事を扱う場合も、公正・客観的な事実として伝えられるものに限る。
 
@@ -91,7 +93,7 @@ class ProcessedArticle:
 
 ### ステップ3: 日本語要約の生成
 
-選定した記事の `summary_text`（または `full_text` がある場合はその先頭 2000 文字）を元に:
+選定した記事の `summary_text` を元に（不足分はステップ4の WebSearch で補う）:
 
 1. **`japanese_title`**: 元タイトルを自然な日本語に意訳（40文字以内）
 2. **`japanese_summary`**: 記事の内容を日本語で詳しく要約（200〜300文字）
@@ -111,7 +113,7 @@ class ProcessedArticle:
 
 ## エラー処理
 
-- `01_articles.json` が空の場合はエラーを raise してパイプラインを停止する
+- `01_articles_index.json` が空の場合はエラーを raise してパイプラインを停止する
 - スコアリング結果が JSON として正しく解釈できない場合は再度試みる（最大2回）
 - 要約生成に失敗した場合は次点の記事を試みる
 
@@ -121,7 +123,7 @@ class ProcessedArticle:
 
 Claude Code コマンドとして実装するため、コマンドファイル内で:
 
-1. `Read` ツールで `.cache/pipeline/01_articles.json` を読み込む
+1. `Read` ツールで `.cache/pipeline/01_articles_index.json` を読み込む
 2. Claude 自身がスコアリングと選定を判断する
 3. `WebSearch` ツールで関連情報を2〜3回調査する
 4. `Write` ツールで `.cache/pipeline/02_selected.json` を保存する
@@ -134,7 +136,7 @@ Python ツールへの依存はなし（Claude が直接 JSON を生成する）
 
 このステージは Claude Code（LLM）が処理するため、ユニットテストではなくコマンド実行による E2E テストで確認する:
 
-- 正常系: `01_articles.json` から `02_selected.json` が生成されること
+- 正常系: `01_articles_index.json` から `02_selected.json` が生成されること
 - 出力が JSON スキーマに準拠していること
 - `key_points` が 3〜5 件であること
 - `interest_score` が 1.0〜10.0 の範囲であること
